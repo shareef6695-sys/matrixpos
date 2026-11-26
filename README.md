@@ -9,6 +9,7 @@ Point of sale for UK supermarkets, convenience stores and small businesses. It r
 - **Works offline:** the till caches the catalogue, keeps selling when the internet drops, and syncs each sale once it's back. Sales are idempotent, so nothing is ever counted twice.
 - **Shifts:** opening float, cash in and out, safe drops, X reports and Z reports with over/short.
 - **Back office:** dashboard, products with CSV import and export, stock per store, transfers, waste, suppliers and purchase orders with delivery booking, sales and receipt lookup, reports (takings, VAT, best sellers, busiest hours, payment methods, by store), loyalty customers with UK GDPR erasure, staff and roles, stores and tills, and feature settings.
+- **Accounts:** double-entry bookkeeping that runs itself. Every sale, refund, void, stock write-off, till cash drop and over/short is posted automatically, along with cost of goods sold. You can record supplier bills and expenses with VAT, pay suppliers, bank cash and card payouts, and post opening balances. Reports cover profit and loss, balance sheet, trial balance and the general ledger, plus a 9-box HMRC VAT return.
 - **Multi-business and multi-branch:** each customer business signs up and gets its own isolated data. Products and offers are shared across its branches, and stock is kept per branch.
 
 ## Tech

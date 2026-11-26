@@ -5,6 +5,7 @@ import { db } from "./db";
 import { compare, getDevice, getTillUser } from "./auth";
 import { atLeast, type Role } from "@/lib/session";
 import type { Prisma } from "@prisma/client";
+import { postSale } from "./accounting";
 
 export const json = (data: unknown, status = 200) => NextResponse.json(data, { status });
 export const fail = (error: string, status = 400) => NextResponse.json({ error }, { status });
@@ -146,6 +147,7 @@ export async function recordSale(orgId: string, storeId: string, registerId: str
       const pts = Math.trunc((s.totalPence / 100) * (settings.loyaltyPointsPerPound ?? 1));
       await tx.customer.updateMany({ where: { id: s.customerId, organizationId: orgId }, data: { points: { increment: pts } } });
     }
+    await postSale(tx, orgId, s.id);
     return { id: s.id, duplicate: false };
   });
 }

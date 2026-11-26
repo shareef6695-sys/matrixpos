@@ -3,6 +3,7 @@
 import { PrismaClient, type VatCode, type PricingUnit } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { gtinCheckDigit } from "../src/lib/pos/barcode";
+import { DEFAULT_CHART } from "../src/lib/accounting/ledger";
 
 const db = new PrismaClient();
 const SLUG = "demo-mart";
@@ -63,7 +64,14 @@ const colors: Record<string, string> = {
 };
 
 async function main() {
-  await db.organization.deleteMany({ where: { slug: SLUG } });
+  const old = await db.organization.findUnique({ where: { slug: SLUG } });
+  if (old) {
+    await db.journalEntry.deleteMany({ where: { organizationId: old.id } });
+    await db.sale.deleteMany({ where: { organizationId: old.id } });
+    await db.purchaseOrder.deleteMany({ where: { organizationId: old.id } });
+    await db.shift.deleteMany({ where: { store: { organizationId: old.id } } });
+    await db.organization.delete({ where: { id: old.id } });
+  }
 
   const org = await db.organization.create({
     data: {
@@ -138,6 +146,28 @@ async function main() {
     items: { create: items(["Croissants x4", "Greek Style Yogurt 500g"]) } } });
   await db.promotion.create({ data: { organizationId: org.id, name: "25% off Fruit", type: "PERCENT_OFF", percentOff: 25,
     items: { create: items(["Loose Apples", "Bananas"]) } } });
+
+  // Accounts: chart, opening balances and a few bills.
+  await db.ledgerAccount.createMany({ data: DEFAULT_CHART.map((a) => ({ organizationId: org.id, code: a.code, name: a.name, type: a.type, systemKey: a.systemKey ?? null, isBank: a.isBank ?? false })) });
+  const acct = async (code: string) => (await db.ledgerAccount.findUniqueOrThrow({ where: { organizationId_code: { organizationId: org.id, code } } })).id;
+  const stockValue = (await db.product.findMany({ where: { organizationId: org.id }, include: { stockLevels: true } }))
+    .reduce((a, p) => a + p.stockLevels.reduce((b, l) => b + Math.round(((p.costPence ?? 0) * l.quantity) / (p.unit === "PER_KG" ? 1000 : 1)), 0), 0);
+  const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1, 9));
+  await db.journalEntry.create({ data: { organizationId: org.id, date: monthStart, source: "MANUAL", memo: "Opening balances", reference: "OPEN", lines: { create: [
+    { accountId: await acct("1200"), debitPence: 500000, creditPence: 0 },
+    { accountId: await acct("1001"), debitPence: stockValue, creditPence: 0 },
+    { accountId: await acct("3000"), debitPence: 0, creditPence: 500000 + stockValue },
+  ] } } });
+  const bill = async (payee: string, code: string, net: number, vatCode: "STANDARD" | "ZERO" | "EXEMPT", paid: boolean, ref: string) => {
+    const vat = vatCode === "STANDARD" ? Math.round(net * 0.2) : 0;
+    const b = await db.bill.create({ data: { organizationId: org.id, payee, date: monthStart, reference: ref, accountId: await acct(code), vatCode, netPence: net, vatPence: vat, grossPence: net + vat, supplierId: payee === supplier.name ? supplier.id : null, ...(paid ? { paidAt: monthStart, paidFromId: await acct("1200") } : {}) } });
+    const lines = [{ accountId: b.accountId, debitPence: net, creditPence: 0 }, ...(vat ? [{ accountId: await acct("2201"), debitPence: vat, creditPence: 0 }] : []), { accountId: await acct("2100"), debitPence: 0, creditPence: net + vat }];
+    await db.journalEntry.create({ data: { organizationId: org.id, date: monthStart, source: "BILL", sourceId: b.id, reference: ref, memo: payee, lines: { create: lines } } });
+    if (paid) await db.journalEntry.create({ data: { organizationId: org.id, date: monthStart, source: "BILL_PAYMENT", sourceId: b.id, reference: ref, memo: `Paid ${payee}`, lines: { create: [{ accountId: await acct("2100"), debitPence: net + vat, creditPence: 0 }, { accountId: await acct("1200"), debitPence: 0, creditPence: net + vat }] } } });
+  };
+  await bill("Shop landlord", "6100", 150000, "EXEMPT", true, "RENT-01");
+  await bill("Octopus Energy", "6200", 32000, "STANDARD", true, "EL-2231");
+  await bill(supplier.name, "1001", 84000, "ZERO", false, "INV-90812");
 
   await db.customer.create({ data: { organizationId: org.id, name: "Sarah Jones", email: "sarah@example.com", loyaltyCode: "MX1001", points: 120, marketingOptIn: true } });
 

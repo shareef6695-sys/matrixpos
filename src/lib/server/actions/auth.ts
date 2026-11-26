@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
+import { ensureChart } from "@/lib/server/accounting";
 import { compare, hash, cookieOpts } from "@/lib/server/auth";
 import { ADMIN_COOKIE, ADMIN_MAX_AGE, DEVICE_COOKIE, TILL_COOKIE, sign } from "@/lib/session";
 
@@ -57,6 +58,7 @@ export async function signup(_: FormState, form: FormData): Promise<FormState> {
     },
     include: { stores: true },
   });
+  await ensureChart(org.id);
   const user = await db.user.create({
     data: {
       organizationId: org.id, name: d.name, email: d.email, role: "OWNER",

@@ -4,7 +4,7 @@ import { saveSettings } from "@/lib/server/actions/admin";
 
 type Flags = Record<string, unknown> & {
   enableCash: boolean; enableCardManual: boolean; enableStripeTerminal: boolean; enableSumUp: boolean; enableDojo: boolean;
-  enablePromotions: boolean; enableAgeCheck: boolean; enableWeighedItems: boolean; enableStockControl: boolean; enableLoyalty: boolean; enableOfflineMode: boolean;
+  enablePromotions: boolean; enableAgeCheck: boolean; enableWeighedItems: boolean; enableStockControl: boolean; enableLoyalty: boolean; enableOfflineMode: boolean; enableAccounting: boolean;
   requireManagerForRefund: boolean; requireManagerForVoid: boolean; embeddedBarcodeMode: string; ageCheckThreshold: number; loyaltyPointsPerPound: number;
 };
 
@@ -49,6 +49,7 @@ export function SettingsForm({ org, flags: f, keys }: { org: { name: string; vat
         <Toggle name="enableWeighedItems" label="Weighed goods" desc="Price per kg, scale labels" on={f.enableWeighedItems} />
         <Toggle name="enableStockControl" label="Stock control" desc="Stock counts, low stock alerts, purchase orders" on={f.enableStockControl} />
         <Toggle name="enableLoyalty" label="Loyalty" desc="Customer cards and points" on={f.enableLoyalty} />
+        <Toggle name="enableAccounting" label="Accounts" desc="Bookkeeping, bills, profit and loss, VAT return" on={f.enableAccounting} />
         <Toggle name="enableOfflineMode" label="Offline selling" desc="Keep selling when the internet drops and sync later" on={f.enableOfflineMode} />
       </div>
 

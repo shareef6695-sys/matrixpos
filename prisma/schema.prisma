@@ -96,6 +96,9 @@ model Organization {
   suppliers   Supplier[]
   customers   Customer[]
   auditLogs   AuditLog[]
+  ledgerAccounts LedgerAccount[]
+  journals    JournalEntry[]
+  bills       Bill[]
 }
 
 model OrgSettings {
@@ -123,6 +126,7 @@ model OrgSettings {
   enableStockControl  Boolean @default(true)
   enableLoyalty       Boolean @default(false)
   enableOfflineMode   Boolean @default(true)
+  enableAccounting    Boolean @default(true)
 
   // UK variable-measure barcodes (EAN-13 starting with 2): price-embedded or weight-embedded
   embeddedBarcodeMode String @default("PRICE") // PRICE | WEIGHT | OFF
@@ -445,6 +449,7 @@ model Supplier {
   accountNo      String?
   products       Product[]
   purchaseOrders PurchaseOrder[]
+  bills          Bill[]
 
   @@unique([organizationId, name])
 }
@@ -492,4 +497,98 @@ model AuditLog {
   createdAt      DateTime     @default(now())
 
   @@index([organizationId, createdAt])
+}
+
+// ---------------- Accounting (double entry) ----------------
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+enum JournalSource {
+  SALE
+  SALE_VOID
+  BILL
+  BILL_PAYMENT
+  STOCK
+  CASH
+  SHIFT
+  TRANSFER
+  MANUAL
+}
+
+model LedgerAccount {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  code           String
+  name           String
+  type           AccountType
+  systemKey      String? // e.g. SALES, VAT_OUTPUT: used by automatic postings
+  isBank         Boolean      @default(false) // bank or cash account money can be paid from
+  archived       Boolean      @default(false)
+
+  lines JournalLine[]
+
+  @@unique([organizationId, code])
+  @@unique([organizationId, systemKey])
+}
+
+model JournalEntry {
+  id             String        @id @default(cuid())
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  date           DateTime
+  reference      String?
+  memo           String?
+  source         JournalSource
+  sourceId       String? // the sale, bill, movement etc. that created it
+  userId         String?
+  createdAt      DateTime      @default(now())
+
+  lines JournalLine[]
+
+  @@unique([organizationId, source, sourceId])
+  @@index([organizationId, date])
+}
+
+model JournalLine {
+  id          String        @id @default(cuid())
+  entry       JournalEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entryId     String
+  account     LedgerAccount @relation(fields: [accountId], references: [id])
+  accountId   String
+  debitPence  Int           @default(0)
+  creditPence Int           @default(0)
+  description String?
+
+  @@index([accountId])
+}
+
+model Bill {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierId     String?
+  payee          String // supplier or shop name as on the invoice/receipt
+  date           DateTime
+  dueDate        DateTime?
+  reference      String? // invoice number
+  accountId      String // what it was for (stock purchases, rent, electricity...)
+  vatCode        VatCode
+  netPence       Int
+  vatPence       Int
+  grossPence     Int
+  paidAt         DateTime?
+  paidFromId     String? // bank or cash account
+  purchaseOrderId String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, date])
 }

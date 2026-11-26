@@ -1,4 +1,5 @@
 import { db } from "@/lib/server/db";
+import { postCashMovement, postShiftClose } from "@/lib/server/accounting";
 import { tillContext, shiftSummary, nextCounter, json, fail, audit } from "@/lib/server/till";
 
 /** Current shift summary (X report). */
@@ -30,7 +31,9 @@ export async function POST(req: Request) {
   if (body.action === "cash") {
     const amount = Math.trunc(Number(body.amountPence) || 0);
     if (!amount) return fail("Enter an amount");
-    await db.cashMovement.create({ data: { shiftId: open.id, amountPence: amount, reason: String(body.reason ?? "").slice(0, 120) || (amount > 0 ? "Paid in" : "Paid out"), userId: ctx.user.id } });
+    const reason = String(body.reason ?? "").slice(0, 120) || (amount > 0 ? "Paid in" : "Paid out");
+    const mv = await db.cashMovement.create({ data: { shiftId: open.id, amountPence: amount, reason, userId: ctx.user.id } });
+    await postCashMovement(db, ctx.device.orgId, mv.id, amount, `Till cash: ${reason}`, ctx.user.id);
     return json({ report: await shiftSummary(open.id) });
   }
 
@@ -42,6 +45,8 @@ export async function POST(req: Request) {
       where: { id: open.id },
       data: { closedAt: new Date(), countedCashPence: Math.trunc(Number(body.countedCashPence) || 0), expectedCashPence: before!.expectedCash, zNumber },
     });
+    const counted = Math.trunc(Number(body.countedCashPence) || 0);
+    await postShiftClose(db, ctx.device.orgId, open.id, counted - before!.expectedCash, zNumber, ctx.user.id);
     await audit(ctx.device.orgId, ctx.user.id, "shift.close", { zNumber, counted: body.countedCashPence, expected: before!.expectedCash });
     return json({ report: await shiftSummary(open.id) });
   }

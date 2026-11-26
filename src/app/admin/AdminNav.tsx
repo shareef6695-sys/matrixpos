@@ -10,6 +10,7 @@ const items: [string, string, ("OWNER" | "MANAGER")[]][] = [
   ["/admin/purchasing", "Suppliers & orders", ["OWNER", "MANAGER"]],
   ["/admin/sales", "Sales", ["OWNER", "MANAGER"]],
   ["/admin/reports", "Reports", ["OWNER", "MANAGER"]],
+  ["/admin/accounts", "Accounts", ["OWNER", "MANAGER"]],
   ["/admin/customers", "Customers", ["OWNER", "MANAGER"]],
   ["/admin/staff", "Staff", ["OWNER", "MANAGER"]],
   ["/admin/stores", "Stores & tills", ["OWNER"]],

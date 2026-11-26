@@ -30,7 +30,7 @@ export default async function PurchaseOrderPage({ params }: { params: Promise<{ 
   return (
     <div>
       <PageHeader title={`${po.reference} · ${po.supplier.name}`} sub={`${po.status.toLowerCase()} · deliver to ${po.store.name} · created ${fmtDate(po.createdAt)}`}
-        actions={mail ? <a href={mail} className="btn-secondary">Email to supplier</a> : undefined} />
+        actions={<>{mail && <a href={mail} className="btn-secondary">Email to supplier</a>}{(po.status === "RECEIVED" || po.status === "PARTIAL") && <a href={`/admin/accounts/bills?po=${po.id}`} className="btn-primary">Enter supplier invoice</a>}</>} />
       <form action={updatePurchaseOrder} className="card overflow-x-auto p-0">
         <input type="hidden" name="id" value={po.id} />
         <table className="table">

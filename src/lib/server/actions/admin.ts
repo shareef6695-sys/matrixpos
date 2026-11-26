@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { requireAdmin, hash, compare } from "@/lib/server/auth";
 import { nextCounter, audit } from "@/lib/server/till";
+import { postSaleVoid, postStockAdjustment } from "@/lib/server/accounting";
 import { parseGBP } from "@/lib/pos/money";
 import type { FormState } from "./auth";
 
@@ -41,7 +42,11 @@ export async function adjustStock(_: FormState, f: FormData): Promise<FormState>
 
   await db.$transaction(async (tx) => {
     await tx.stockLevel.upsert({ where: { storeId_productId: { storeId, productId } }, create: { storeId, productId, quantity: delta }, update: { quantity: { increment: delta } } });
-    await tx.stockMovement.create({ data: { storeId, productId, type, quantity: delta, note, userId: s.userId, reference: to ? `to ${to.name}` : null } });
+    const mv = await tx.stockMovement.create({ data: { storeId, productId, type, quantity: delta, note, userId: s.userId, reference: to ? `to ${to.name}` : null } });
+    if ((type === "ADJUSTMENT" || type === "WASTE") && product.costPence) {
+      const value = Math.round(product.unit === "PER_KG" ? (product.costPence * delta) / 1000 : product.costPence * delta);
+      await postStockAdjustment(tx, s.orgId, mv.id, value, `${type === "WASTE" ? "Waste" : "Stock count"}: ${product.name}`, s.userId);
+    }
     if (to) {
       await tx.stockLevel.upsert({ where: { storeId_productId: { storeId: to.id, productId } }, create: { storeId: to.id, productId, quantity: -delta }, update: { quantity: { increment: -delta } } });
       await tx.stockMovement.create({ data: { storeId: to.id, productId, type: "TRANSFER_IN", quantity: -delta, note, userId: s.userId, reference: `from ${store.name}` } });
@@ -183,6 +188,7 @@ export async function voidSale(f: FormData) {
   if (!sale || sale.status === "VOIDED") return;
   await db.$transaction(async (tx) => {
     await tx.sale.update({ where: { id: sale.id }, data: { status: "VOIDED" } });
+    await postSaleVoid(tx, s.orgId, sale.id, s.userId);
     for (const l of sale.lines) {
       if (!l.productId || !l.product?.trackStock) continue;
       const back = sale.kind === "SALE" ? Math.abs(l.quantity) : -Math.abs(l.quantity);
@@ -330,7 +336,7 @@ export async function saveSettings(_: FormState, f: FormData): Promise<FormState
     update: {
       enableCash: on("enableCash"), enableCardManual: on("enableCardManual"), enableStripeTerminal: on("enableStripeTerminal"), enableSumUp: on("enableSumUp"), enableDojo: on("enableDojo"),
       enablePromotions: on("enablePromotions"), enableAgeCheck: on("enableAgeCheck"), enableWeighedItems: on("enableWeighedItems"), enableStockControl: on("enableStockControl"),
-      enableLoyalty: on("enableLoyalty"), enableOfflineMode: on("enableOfflineMode"),
+      enableLoyalty: on("enableLoyalty"), enableOfflineMode: on("enableOfflineMode"), enableAccounting: on("enableAccounting"),
       requireManagerForRefund: on("requireManagerForRefund"), requireManagerForVoid: on("requireManagerForVoid"),
       embeddedBarcodeMode: ["PRICE", "WEIGHT", "OFF"].includes(str(f, "embeddedBarcodeMode")) ? str(f, "embeddedBarcodeMode") : "PRICE",
       ageCheckThreshold: [21, 25].includes(parseInt(str(f, "ageCheckThreshold"), 10)) ? parseInt(str(f, "ageCheckThreshold"), 10) : 25,
