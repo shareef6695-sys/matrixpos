@@ -1,0 +1,495 @@
+// MatrixPOS database schema.
+// All money is stored as integer pence. All weights are stored as integer grams.
+// Every business (tenant) is an Organization; branches are Stores; tills are Registers.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  SUPERVISOR
+  CASHIER
+}
+
+enum VatCode {
+  STANDARD // 20%
+  REDUCED // 5%
+  ZERO // 0%
+  EXEMPT // outside VAT
+}
+
+enum PricingUnit {
+  EACH
+  PER_KG
+}
+
+enum PromotionType {
+  MULTIBUY_PRICE // buy N for £X (e.g. 3 for £2)
+  BUY_X_GET_Y // buy X get Y free (BOGOF = 1/1)
+  PERCENT_OFF // n% off
+  MEAL_DEAL // one item from each group for a fixed price
+}
+
+enum PaymentMethod {
+  CASH
+  CARD_MANUAL // card taken on a standalone terminal, keyed by cashier
+  STRIPE_TERMINAL
+  SUMUP
+  DOJO
+  VOUCHER
+}
+
+enum SaleStatus {
+  COMPLETED
+  VOIDED
+}
+
+enum SaleKind {
+  SALE
+  REFUND
+}
+
+enum StockMovementType {
+  SALE
+  REFUND
+  RECEIVED
+  ADJUSTMENT
+  WASTE
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+model Organization {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  vatNumber    String? // e.g. GB123456789
+  companyNo    String?
+  receiptFooter String?
+  brandColor   String   @default("#0f766e")
+  currency     String   @default("GBP")
+  createdAt    DateTime @default(now())
+
+  // Feature activation: each business switches on what it needs.
+  settings OrgSettings?
+
+  stores      Store[]
+  users       User[]
+  categories  Category[]
+  products    Product[]
+  promotions  Promotion[]
+  suppliers   Supplier[]
+  customers   Customer[]
+  auditLogs   AuditLog[]
+}
+
+model OrgSettings {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String       @unique
+
+  // Payment methods the business has activated
+  enableCash           Boolean @default(true)
+  enableCardManual     Boolean @default(true)
+  enableStripeTerminal Boolean @default(false)
+  enableSumUp          Boolean @default(false)
+  enableDojo           Boolean @default(false)
+
+  // Provider credentials (server-side only, never sent to the browser)
+  stripeSecretKey   String?
+  sumupApiKey       String?
+  sumupMerchantCode String?
+  dojoApiKey        String?
+
+  // Modules
+  enablePromotions    Boolean @default(true)
+  enableAgeCheck      Boolean @default(true)
+  enableWeighedItems  Boolean @default(true)
+  enableStockControl  Boolean @default(true)
+  enableLoyalty       Boolean @default(false)
+  enableOfflineMode   Boolean @default(true)
+
+  // UK variable-measure barcodes (EAN-13 starting with 2): price-embedded or weight-embedded
+  embeddedBarcodeMode String @default("PRICE") // PRICE | WEIGHT | OFF
+
+  ageCheckThreshold Int @default(25) // Challenge 25
+  loyaltyPointsPerPound Int @default(1)
+  requireManagerForRefund Boolean @default(true)
+  requireManagerForVoid   Boolean @default(true)
+}
+
+model Store {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  name           String
+  code           String // short code printed on receipts, e.g. "LDN1"
+  addressLine1   String?
+  addressLine2   String?
+  town           String?
+  postcode       String?
+  phone          String?
+  createdAt      DateTime     @default(now())
+
+  registers    Register[]
+  stockLevels  StockLevel[]
+  sales        Sale[]
+  shifts       Shift[]
+  movements    StockMovement[]
+  purchaseOrders PurchaseOrder[]
+  users        UserStore[]
+
+  @@unique([organizationId, code])
+}
+
+model Register {
+  id        String   @id @default(cuid())
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId   String
+  name      String // "Till 1"
+  number    Int
+  stripeReaderId String?
+  sumupReaderId  String?
+  dojoTerminalId String?
+  createdAt DateTime @default(now())
+
+  sales  Sale[]
+  shifts Shift[]
+
+  @@unique([storeId, number])
+}
+
+model User {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  name           String
+  email          String?      @unique
+  passwordHash   String? // back office login (owners and managers)
+  pinHash        String // till login
+  role           Role         @default(CASHIER)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  stores    UserStore[]
+  sales     Sale[]
+  shifts    Shift[]
+  auditLogs AuditLog[]
+}
+
+model UserStore {
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId String
+
+  @@id([userId, storeId])
+}
+
+model Category {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  name           String
+  color          String       @default("#64748b")
+  sortOrder      Int          @default(0)
+  products       Product[]
+
+  @@unique([organizationId, name])
+}
+
+model Product {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  category       Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId     String?
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierId     String?
+
+  name        String
+  sku         String?
+  plu         String? // short code for loose items and embedded barcodes
+  pricePence  Int // VAT inclusive; per kg when unit = PER_KG
+  costPence   Int?        // VAT exclusive cost price
+  vatCode     VatCode     @default(STANDARD)
+  unit        PricingUnit @default(EACH)
+  minAge      Int? // 16 or 18 for age-restricted goods
+  trackStock  Boolean     @default(true)
+  reorderLevel Int?
+  reorderQty   Int?
+  quickKey    Boolean     @default(false) // show as a button on the till
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  barcodes    Barcode[]
+  stockLevels StockLevel[]
+  saleLines   SaleLine[]
+  movements   StockMovement[]
+  promotionItems PromotionItem[]
+  poLines     PurchaseOrderLine[]
+
+  @@unique([organizationId, sku])
+  @@unique([organizationId, plu])
+  @@index([organizationId, name])
+}
+
+model Barcode {
+  id             String  @id @default(cuid())
+  organizationId String
+  product        Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId      String
+  code           String
+  packQty        Int     @default(1) // outer case barcodes can sell multiple units
+
+  @@unique([organizationId, code])
+}
+
+model StockLevel {
+  store     Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId   String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  quantity  Int     @default(0) // units, or grams for PER_KG products
+
+  @@id([storeId, productId])
+}
+
+model StockMovement {
+  id        String            @id @default(cuid())
+  store     Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId   String
+  product   Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  type      StockMovementType
+  quantity  Int // signed
+  reference String?
+  note      String?
+  userId    String?
+  createdAt DateTime          @default(now())
+
+  @@index([storeId, productId, createdAt])
+}
+
+model Promotion {
+  id             String        @id @default(cuid())
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  name           String // shown on receipt, e.g. "3 for £2"
+  type           PromotionType
+  // MULTIBUY_PRICE: quantity + pricePence. BUY_X_GET_Y: quantity (buy) + freeQuantity.
+  // PERCENT_OFF: percentOff. MEAL_DEAL: pricePence, items carry a group number.
+  quantity       Int?
+  freeQuantity   Int?
+  pricePence     Int?
+  percentOff     Int?
+  startsAt       DateTime?
+  endsAt         DateTime?
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+
+  items PromotionItem[]
+}
+
+model PromotionItem {
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  promotionId String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId   String
+  group       Int       @default(1) // meal deal group: 1 main, 2 snack, 3 drink
+
+  @@id([promotionId, productId])
+}
+
+model Customer {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  name           String
+  email          String?
+  phone          String?
+  loyaltyCode    String?
+  points         Int          @default(0)
+  marketingOptIn Boolean      @default(false) // UK GDPR / PECR consent
+  createdAt      DateTime     @default(now())
+  sales          Sale[]
+
+  @@unique([organizationId, loyaltyCode])
+}
+
+model Shift {
+  id              String    @id @default(cuid())
+  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId         String
+  register        Register  @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  registerId      String
+  user            User      @relation(fields: [userId], references: [id])
+  userId          String
+  openedAt        DateTime  @default(now())
+  closedAt        DateTime?
+  openingFloatPence Int     @default(0)
+  countedCashPence  Int?
+  expectedCashPence Int?
+  zNumber         Int? // sequential Z report number per register
+  sales           Sale[]
+  cashMovements   CashMovement[]
+}
+
+model CashMovement {
+  id        String   @id @default(cuid())
+  shift     Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  shiftId   String
+  amountPence Int // positive = paid in, negative = paid out / safe drop
+  reason    String
+  userId    String
+  createdAt DateTime @default(now())
+}
+
+model Sale {
+  id             String     @id // client-generated UUID so offline sales sync idempotently
+  organizationId String
+  store          Store      @relation(fields: [storeId], references: [id])
+  storeId        String
+  register       Register   @relation(fields: [registerId], references: [id])
+  registerId     String
+  shift          Shift?     @relation(fields: [shiftId], references: [id])
+  shiftId        String?
+  user           User       @relation(fields: [userId], references: [id])
+  userId         String
+  customer       Customer?  @relation(fields: [customerId], references: [id])
+  customerId     String?
+  receiptNo      String // e.g. LDN1-1-000123
+  kind           SaleKind   @default(SALE)
+  status         SaleStatus @default(COMPLETED)
+  originalSaleId String? // for refunds
+  subtotalPence  Int // before promotions
+  discountPence  Int
+  totalPence     Int // VAT inclusive, signed (negative for refunds)
+  vatPence       Int
+  changePence    Int        @default(0)
+  ageVerified    Boolean    @default(false)
+  createdAt      DateTime // till time
+  syncedAt       DateTime   @default(now())
+
+  lines    SaleLine[]
+  payments Payment[]
+  vatLines SaleVat[]
+
+  @@unique([organizationId, receiptNo])
+  @@index([organizationId, storeId, createdAt])
+}
+
+model SaleLine {
+  id            String  @id @default(cuid())
+  sale          Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleId        String
+  product       Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId     String?
+  name          String
+  quantity      Int // units, or grams for weighed lines
+  unit          PricingUnit
+  unitPricePence Int
+  grossPence    Int // before discount
+  discountPence Int
+  netPence      Int // after discount, VAT inclusive
+  vatCode       VatCode
+  vatRate       Int // basis points, 2000 = 20%
+  promotionName String?
+}
+
+model SaleVat {
+  sale       Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleId     String
+  vatCode    VatCode
+  vatRate    Int
+  grossPence Int
+  vatPence   Int
+
+  @@id([saleId, vatCode])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  sale        Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleId      String
+  method      PaymentMethod
+  amountPence Int // signed
+  reference   String? // provider transaction id or last 4 digits
+  createdAt   DateTime      @default(now())
+}
+
+model Supplier {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  name           String
+  contactName    String?
+  email          String?
+  phone          String?
+  accountNo      String?
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([organizationId, name])
+}
+
+model PurchaseOrder {
+  id         String              @id @default(cuid())
+  organizationId String
+  supplier   Supplier            @relation(fields: [supplierId], references: [id])
+  supplierId String
+  store      Store               @relation(fields: [storeId], references: [id])
+  storeId    String
+  reference  String
+  status     PurchaseOrderStatus @default(DRAFT)
+  notes      String?
+  createdAt  DateTime            @default(now())
+  receivedAt DateTime?
+  lines      PurchaseOrderLine[]
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(cuid())
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  purchaseOrderId String
+  product         Product       @relation(fields: [productId], references: [id])
+  productId       String
+  quantity        Int
+  receivedQty     Int           @default(0)
+  costPence       Int?
+}
+
+model Counter {
+  // Sequential numbers (receipts, Z reports, PO refs) per scope
+  key   String @id
+  value Int    @default(0)
+}
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId         String?
+  action         String
+  detail         Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+}

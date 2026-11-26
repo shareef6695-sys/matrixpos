@@ -1,0 +1,56 @@
+# PostgreSQL for MatrixPOS on a UK VPS.
+# Usage: see docs/DEPLOY.md. Run `sudo ./setup.sh <hostname>` once; it starts everything.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: matrixpos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: matrixpos
+      POSTGRES_USER: matrixpos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      TZ: Europe/London
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/certs/server.crt
+      - -c
+      - ssl_key_file=/certs/server.key
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+      - -c
+      - max_connections=200
+      - -c
+      - password_encryption=scram-sha-256
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./certs:/certs:ro
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matrixpos -d matrixpos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Nightly compressed backup at 02:30 UK time, keeping the last 14 days in ./backups.
+  # Copy these off the server too (e.g. rclone to cloud storage).
+  backup:
+    image: postgres:16-alpine
+    container_name: matrixpos-backup
+    restart: unless-stopped
+    depends_on: [db]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Europe/London
+    volumes:
+      - ./backups:/backups
+      - ./backup.sh:/backup.sh:ro
+    entrypoint: ["sh", "/backup.sh"]
+
+volumes:
+  pgdata:
