@@ -42,7 +42,7 @@ docker compose ps
 
 PW=$(grep POSTGRES_PASSWORD .env | cut -d= -f2)
 echo
-echo "Done. Add this to Vercel as DATABASE_URL (Production and Preview):"
+echo "Done. Add this to Vercel as both DATABASE_URL and DIRECT_URL (Production and Preview):"
 echo
 echo "  postgresql://matrixpos:${PW}@${HOST}:5432/matrixpos?sslmode=require&sslaccept=accept_invalid_certs&connection_limit=5&pool_timeout=20"
 echo

@@ -1,5 +1,7 @@
 # Deploying MatrixPOS
 
+> Using self-hosted Supabase as the database instead of plain PostgreSQL? See [SUPABASE.md](SUPABASE.md).
+
 The app runs on **Vercel** in the London region (`lhr1`, set in `vercel.json`). The database runs on **your UK VPS** in Docker, with SSL, a firewall and nightly backups. All customer data stays in the UK.
 
 ## 1. Database on the VPS
@@ -32,7 +34,7 @@ The database only accepts encrypted password connections from outside the server
 
 1. In Vercel, **Add New → Project** and import the `matrixpos` GitHub repository. The framework is detected as Next.js.
 2. Under **Environment Variables**, add for Production and Preview:
-   - `DATABASE_URL`: the URL printed by `setup.sh`
+   - `DATABASE_URL` and `DIRECT_URL`: both set to the URL printed by `setup.sh`
    - `AUTH_SECRET`: a long random string, e.g. the output of `openssl rand -base64 48`
 3. Deploy. The build runs `prisma migrate deploy` (via the `vercel-build` script), so the database tables are created on the first deploy and updated on later ones.
 4. Optional: load the demo shop once from your computer with `DATABASE_URL=... npm run db:seed`. Skip this for a real shop.
