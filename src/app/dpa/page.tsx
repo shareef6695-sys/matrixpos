@@ -31,7 +31,7 @@ export default function Dpa() {
       <h2>3. Sub-processors</h2>
       <p>You give general authorisation for us to use these sub-processors. We&apos;ll tell you before adding or replacing one, so you can object.</p>
       <ul>
-        <li>Our UK server provider: database hosting and backups, in the United Kingdom.</li>
+        <li>LightNode: database hosting and backups, on a server in the United Kingdom.</li>
         <li>Vercel Inc.: application hosting, London region. Transfers are covered by the UK International Data Transfer Addendum or the UK–US data bridge.</li>
         <li>Our email delivery provider: sending account emails.</li>
       </ul>
