@@ -1,3 +1,4 @@
+import { PoweredBy } from "@/components/PoweredBy";
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/server/billing";
 import { Logo } from "@/components/Logo";
@@ -21,6 +22,7 @@ export default async function PlatformLayout({ children }: { children: React.Rea
         </div>
       </header>
       <main className="mx-auto max-w-7xl p-4 sm:p-6">{children}</main>
+      <footer className="pb-6 text-center"><PoweredBy /></footer>
     </div>
   );
 }

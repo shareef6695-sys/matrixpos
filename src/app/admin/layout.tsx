@@ -1,3 +1,4 @@
+import { PoweredBy } from "@/components/PoweredBy";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/server/auth";
 import { logout } from "@/lib/server/actions/auth";
@@ -30,6 +31,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/till" className="btn-primary mb-3 w-full">Open till</Link>
           <div className="text-xs text-slate-500">{s.name} · {s.role.toLowerCase()}</div>
           <form action={logout}><button className="mt-1 text-xs font-semibold text-slate-600 hover:text-slate-900">Sign out</button></form>
+          <PoweredBy className="mt-4" />
         </div>
       </aside>
       <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">

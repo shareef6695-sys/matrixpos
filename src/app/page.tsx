@@ -1,3 +1,4 @@
+import { PoweredBy } from "@/components/PoweredBy";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { PricingCards } from "@/components/Pricing";
@@ -81,6 +82,7 @@ export default function Home() {
       </section>
       <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-500">
         MatrixPOS · Data hosted in the United Kingdom · UK GDPR ready
+        <PoweredBy className="mt-1" />
       </footer>
     </main>
   );

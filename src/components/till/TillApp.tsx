@@ -1,4 +1,5 @@
 "use client";
+import { PoweredBy } from "@/components/PoweredBy";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { priceBasket, type CartLine } from "@/lib/pos/pricing";
 import { parseEmbeddedBarcode, parseScanInput } from "@/lib/pos/barcode";
@@ -179,6 +180,7 @@ function PinScreen({ boot, online, onDone }: { boot: Bootstrap; online: boolean;
           <a href="/admin" className="hover:text-slate-700">Back office</a>
           <button onClick={async () => { if (confirm("Unlink this device from the till?")) { await fetch("/api/till/device", { method: "DELETE" }); location.reload(); } }} className="hover:text-slate-700">Unlink device</button>
         </div>
+        <PoweredBy className="mt-4 text-center" />
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { PoweredBy } from "@/components/PoweredBy";
 import Link from "next/link";
 import { Logo } from "./Logo";
 
@@ -11,6 +12,7 @@ export function AuthCard({ title, children, footer }: { title: string; children:
           {children}
         </div>
         {footer && <div className="mt-4 text-center text-sm text-slate-600">{footer}</div>}
+        <PoweredBy className="mt-6 text-center" />
       </div>
     </main>
   );
