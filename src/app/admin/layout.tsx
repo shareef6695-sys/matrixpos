@@ -24,20 +24,23 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       : null;
   return (
     <div className="min-h-screen lg:flex">
-      <aside className="border-b border-slate-200 bg-white lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-r">
+      <aside className="border-b border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-60 lg:shrink-0 lg:flex-col lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between px-4 py-4">
           <Link href="/admin">
             <Logo className="text-lg" />
             <PoweredBy className="mt-0.5 text-[11px]" />
           </Link>
-          <Link href="/till" className="btn-primary px-3 py-1.5 text-xs lg:hidden">Till</Link>
+          <div className="flex items-center gap-2 lg:hidden">
+            <Link href="/till" className="btn-primary px-3 py-1.5 text-xs">Till</Link>
+            <form action={logout}><button className="btn-secondary px-3 py-1.5 text-xs">Sign out</button></form>
+          </div>
         </div>
         <div className="hidden px-4 pb-3 text-xs font-semibold text-slate-700 lg:block">{org?.name}</div>
-        <AdminNav role={s.role} platform={platform} />
+        <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto"><AdminNav role={s.role} platform={platform} /></div>
         <div className="hidden border-t border-slate-100 p-4 lg:block">
           <Link href="/till" className="btn-primary mb-3 w-full">Open till</Link>
           <Link href="/admin/account" className="block text-xs text-slate-500 hover:text-slate-900">{s.name} · {s.role.toLowerCase()} · My account</Link>
-          <form action={logout}><button className="mt-1 text-xs font-semibold text-slate-600 hover:text-slate-900">Sign out</button></form>
+          <form action={logout}><button className="btn-secondary mt-2 w-full py-1.5 text-sm">Sign out</button></form>
         </div>
       </aside>
       <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
