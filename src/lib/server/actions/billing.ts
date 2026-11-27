@@ -104,9 +104,14 @@ export async function payByCard(_: FormState, f: FormData): Promise<FormState> {
     const price = await priceFor(plan, cycle);
 
     // Already paying by card: switch the subscription to the new plan, with a pro-rata adjustment on the next invoice.
+    // Ids saved while using test keys don't exist with live keys (and the other way round): forget them and start fresh.
+    const missing = (e: unknown) => (e as { code?: string })?.code === "resource_missing";
     if (org.stripeSubscriptionId) {
-      const sub = await st.subscriptions.retrieve(org.stripeSubscriptionId);
-      if (sub.status !== "canceled") {
+      const sub = await st.subscriptions.retrieve(org.stripeSubscriptionId).catch((e) => { if (missing(e)) return null; throw e; });
+      if (!sub) {
+        org.stripeSubscriptionId = null;
+        await db.organization.update({ where: { id: org.id }, data: { stripeSubscriptionId: null } });
+      } else if (sub.status !== "canceled") {
         await st.subscriptions.update(sub.id, { items: [{ id: sub.items.data[0].id, price }], proration_behavior: "create_prorations", cancel_at_period_end: false });
         await syncSubscription(await st.subscriptions.retrieve(sub.id));
         await audit(s.orgId, s.userId, "billing.card.change", { plan, cycle });
@@ -117,6 +122,10 @@ export async function payByCard(_: FormState, f: FormData): Promise<FormState> {
 
     const user = await db.user.findUniqueOrThrow({ where: { id: s.userId } });
     let customer = org.stripeCustomerId;
+    if (customer) {
+      const c = await st.customers.retrieve(customer).catch((e) => { if (missing(e)) return null; throw e; });
+      if (!c || ("deleted" in c && c.deleted)) customer = null;
+    }
     if (!customer) {
       const c = await st.customers.create({ name: org.name, email: user.email ?? undefined, metadata: { orgId: org.id } });
       customer = c.id;

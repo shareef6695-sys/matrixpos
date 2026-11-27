@@ -5,7 +5,7 @@ import { accessFor, planById, STATUS_LABEL } from "@/lib/plans";
 import { platformEmails } from "@/lib/server/billing";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { PlanPicker } from "./PlanPicker";
-import { stripeBillingEnabled } from "@/lib/server/stripe-billing";
+import { stripeBillingEnabled, stripeMode } from "@/lib/server/stripe-billing";
 import { CloseAccount } from "./CloseAccount";
 import { cancelClosure } from "@/lib/server/actions/account";
 import { CLOSURE_DAYS } from "@/lib/server/account";
@@ -32,6 +32,11 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
   return (
     <div className="max-w-6xl">
       <PageHeader title="Plan & billing" sub="Your MatrixPOS subscription" />
+      {stripeMode() === "test" && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Card payments are in <b>test mode</b>: use card 4242 4242 4242 4242. No real money is taken.
+        </div>
+      )}
       {card === "success" && (
         <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
           <strong>Thank you, your card payment went through.</strong> Your plan updates within a minute. Receipts are emailed to you by Stripe.

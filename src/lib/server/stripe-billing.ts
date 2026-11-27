@@ -8,11 +8,16 @@ import { planById, PLANS, type PlanId } from "@/lib/plans";
 // (Separate from each shop's Stripe Terminal keys, which are stored in their settings.)
 
 export const stripeBillingEnabled = () => !!process.env.STRIPE_BILLING_SECRET_KEY;
+/** "test" with sk_test_/rk_test_ keys, "live" with live keys, null when card payments are off. */
+export const stripeMode = () => {
+  const k = (process.env.STRIPE_BILLING_SECRET_KEY ?? "").trim();
+  return !k ? null : /^(sk|rk)_test_/.test(k) ? ("test" as const) : ("live" as const);
+};
 
 let client: Stripe | null = null;
 export function stripe() {
   if (!process.env.STRIPE_BILLING_SECRET_KEY) throw new Error("STRIPE_BILLING_SECRET_KEY is not set");
-  client ??= new Stripe(process.env.STRIPE_BILLING_SECRET_KEY, { apiVersion: "2025-02-24.acacia", appInfo: { name: "MatrixPOS" } });
+  client ??= new Stripe(process.env.STRIPE_BILLING_SECRET_KEY.trim(), { apiVersion: "2025-02-24.acacia", appInfo: { name: "MatrixPOS" } });
   return client;
 }
 

@@ -5,6 +5,7 @@ import { formatGBP } from "@/lib/pos/money";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { planById } from "@/lib/plans";
 import { StatusBadge } from "./StatusBadge";
+import { stripeMode } from "@/lib/server/stripe-billing";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,9 @@ export default async function PlatformHome({ searchParams }: { searchParams: Pro
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">All customers</h1>
         <p className="mt-1 text-sm text-slate-500">Every business that has signed up to MatrixPOS. Your own shop and the demo shop are left out of the numbers.</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Card payments: {stripeMode() === "live" ? <b className="text-emerald-700">Stripe live mode</b> : stripeMode() === "test" ? <b className="text-amber-700">Stripe TEST mode (no real money)</b> : <b>off (invoices only)</b>}
+        </p>
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
