@@ -20,6 +20,7 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgresql://matrixpos:matrixpos@localhost:5432/matrixpos
+      DIRECT_URL: postgresql://matrixpos:matrixpos@localhost:5432/matrixpos
       AUTH_SECRET: ci-secret-ci-secret-ci-secret-ci-secret-1234
     steps:
       - uses: actions/checkout@v4
