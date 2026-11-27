@@ -82,6 +82,11 @@ export default function Home() {
       </section>
       <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-500">
         MatrixPOS · Data hosted in the United Kingdom · UK GDPR ready
+        <div className="mt-2 flex justify-center gap-4 font-semibold text-slate-600">
+          <Link href="/privacy" className="hover:text-slate-900">Privacy</Link>
+          <Link href="/terms" className="hover:text-slate-900">Terms</Link>
+          <Link href="/dpa" className="hover:text-slate-900">Data processing</Link>
+        </div>
         <PoweredBy className="mt-1" />
       </footer>
     </main>

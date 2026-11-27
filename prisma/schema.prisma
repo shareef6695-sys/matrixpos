@@ -97,6 +97,12 @@ model Organization {
   paidUntil     DateTime?
   billingNote   String?
 
+  // Legal: when the owner accepted the terms, privacy policy and data processing agreement.
+  termsAcceptedAt    DateTime?
+  termsVersion       String?
+  // Owner asked to close the account. Data is deleted 30 days later.
+  closureRequestedAt DateTime?
+
   // Feature activation: each business switches on what it needs.
   settings OrgSettings?
 
@@ -201,6 +207,10 @@ model User {
   role           Role         @default(CASHIER)
   active         Boolean      @default(true)
   createdAt      DateTime     @default(now())
+  emailVerifiedAt DateTime?
+  totpSecret     String? // two-step sign-in (authenticator app), base32
+  totpEnabledAt  DateTime?
+  authTokens     AuthToken[]
 
   stores    UserStore[]
   sales     Sale[]
@@ -622,4 +632,33 @@ enum BillingStatus {
 enum BillingCycle {
   MONTHLY
   YEARLY
+}
+
+enum AuthTokenKind {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+/** One-time links sent by email. Only a hash of the token is stored. */
+model AuthToken {
+  id        String        @id @default(cuid())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  kind      AuthTokenKind
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, kind])
+}
+
+/** Back office sign-in attempts, for rate limiting. Old rows are purged daily. */
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  key       String // "email:<address>" or "ip:<address>"
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
 }

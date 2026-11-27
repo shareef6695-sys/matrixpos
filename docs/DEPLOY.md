@@ -50,6 +50,19 @@ The connection string includes `connection_limit=5`, which keeps Vercel's server
 4. **Staff:** give each person a role and their own PIN.
 5. On each till device, sign in as the owner or a manager, open `/till`, and pick the till. Use the browser's **Install app** option to make it full screen.
 
+## Email
+
+MatrixPOS sends emails to confirm new accounts and reset passwords. Set up one of these in Vercel's environment variables:
+
+- **Resend** (resend.com, free for 3,000 emails a month): `RESEND_API_KEY`. Verify your domain in Resend first.
+- **Any SMTP mailbox** (Zoho Mail, Hostinger, Microsoft 365, Gmail): `SMTP_HOST`, `SMTP_PORT` (465, or 587), `SMTP_USER` and `SMTP_PASSWORD`. For Zoho, the host is `smtp.zoho.eu` (or `smtp.zoho.com`). For Hostinger it is `smtp.hostinger.com`.
+
+Also set `EMAIL_FROM`, for example `MatrixPOS <no-reply@matrixinfo.co.uk>`, using an address your provider lets you send from. Without email settings, nobody can confirm their email or reset a password.
+
+## Daily clean-up
+
+`vercel.json` runs `/api/cron/daily` every night. It permanently deletes businesses whose owners closed their account more than 30 days ago, and clears old sign-in records. Set `CRON_SECRET` in Vercel to a long random string (Vercel sends it with each run). Without it, the job refuses to run.
+
 ## Pricing and your HQ dashboard
 
 Plans and prices live in `src/lib/plans.ts`. Change them there and they update on the landing page, the sign-up form and the billing page.
@@ -58,9 +71,10 @@ Every new business gets a 14-day free trial. When the trial ends, or you suspend
 
 To open the HQ dashboard at `/platform`:
 
-1. Sign up for a MatrixPOS account with your own email (this is your own business on the system).
-2. In Vercel, add `PLATFORM_ADMIN_EMAILS` with that email (comma separate several) and redeploy.
-3. Sign in and click **MatrixPOS HQ** in the menu.
+1. Set up email (above), then sign up for a MatrixPOS account with your own email (this is your own business on the system).
+2. Confirm your email with the link we send. HQ access needs a confirmed email, so nobody else can claim it by signing up with your address.
+3. In Vercel, add `PLATFORM_ADMIN_EMAILS` with that email (comma separate several) and redeploy.
+4. Sign in and click **MatrixPOS HQ** in the menu.
 
 The dashboard shows every business, sign-ups per week, who is trading, takings, trials ending, monthly revenue and plan requests. On each business you can mark it paid, extend its trial, change its plan or suspend it. Your own business and the demo shop are never locked and are left out of the numbers. Everyone else gets a 404 at `/platform`.
 
@@ -77,6 +91,14 @@ Each business enters its own keys in **Settings**, and links a reader to each ti
 | Dojo | API key from the Dojo developer portal and the terminal id |
 
 Test with sandbox keys before taking real payments. Integrated card payments need an internet connection. If the connection drops, the till still offers cash and keyed card payments.
+
+## Security and UK GDPR
+
+- Passwords and PINs are stored as bcrypt hashes. Sessions are signed, HTTP-only cookies.
+- Back office sign-in is limited to 5 wrong passwords per account and 30 per network address in 15 minutes. Till PINs lock for a minute after 5 wrong tries.
+- Owners and managers can turn on two-step sign-in with an authenticator app under **My account**. If someone loses their phone, switch it off for them on their business page in HQ.
+- New accounts must accept the terms, privacy policy and data processing agreement (`/terms`, `/privacy`, `/dpa`). When you change them, update `version` in `src/lib/legal.ts` and owners are asked to accept again. Have a solicitor review the wording.
+- Owners can download all their data and close their account under **Plan & billing**.
 
 ## Security checklist
 

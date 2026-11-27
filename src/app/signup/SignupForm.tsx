@@ -30,6 +30,14 @@ export function SignupForm({ plan = "BUSINESS" }: { plan?: string }) {
         </select>
         <p className="mt-1 text-xs text-slate-500">Free for {TRIAL_DAYS} days, no card needed. You can change plan at any time.</p>
       </div>
+      <label className="flex items-start gap-2 text-sm text-slate-600">
+        <input type="checkbox" name="terms" required className="mt-0.5 h-4 w-4 shrink-0 accent-brand-700" />
+        <span>
+          I agree to the <a href="/terms" target="_blank" className="font-semibold text-brand-700">terms</a>,{" "}
+          <a href="/privacy" target="_blank" className="font-semibold text-brand-700">privacy policy</a> and{" "}
+          <a href="/dpa" target="_blank" className="font-semibold text-brand-700">data processing agreement</a>.
+        </span>
+      </label>
       {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
       <button className="btn-primary w-full py-3" disabled={pending}>{pending ? "Creating…" : `Start ${TRIAL_DAYS}-day free trial`}</button>
     </form>

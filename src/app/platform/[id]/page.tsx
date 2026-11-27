@@ -6,6 +6,8 @@ import { formatGBP } from "@/lib/pos/money";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { displayStatus, planById } from "@/lib/plans";
 import { platformQuick } from "@/lib/server/actions/billing";
+import { platformDeleteNow, platformResetMfa } from "@/lib/server/actions/account";
+import { CLOSURE_DAYS } from "@/lib/server/account";
 import { StatusBadge } from "../StatusBadge";
 import { BillingForm } from "./BillingForm";
 
@@ -13,13 +15,14 @@ export const dynamic = "force-dynamic";
 
 const DAY = 86_400_000;
 
-export default async function PlatformShop({ params }: { params: Promise<{ id: string }> }) {
+export default async function PlatformShop({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ confirm?: string }> }) {
   const { id } = await params;
+  const { confirm } = await searchParams;
   const org = await db.organization.findUnique({
     where: { id },
     include: {
       stores: { include: { registers: { orderBy: { number: "asc" } } }, orderBy: { name: "asc" } },
-      users: { orderBy: [{ role: "desc" }, { name: "asc" }], select: { id: true, name: true, email: true, role: true, active: true } },
+      users: { orderBy: [{ role: "desc" }, { name: "asc" }], select: { id: true, name: true, email: true, role: true, active: true, emailVerifiedAt: true, totpEnabledAt: true } },
       _count: { select: { products: true, customers: true } },
     },
   });
@@ -47,6 +50,17 @@ export default async function PlatformShop({ params }: { params: Promise<{ id: s
         <span className="badge bg-slate-100">{plan.name} · {org.billingCycle.toLowerCase()}</span>
       </div>
 
+      {org.closureRequestedAt && (
+        <form action={platformDeleteNow} className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          <span className="flex-1">
+            The owner closed this account on {fmtDate(org.closureRequestedAt)}. It will be deleted automatically on {fmtDate(new Date(org.closureRequestedAt.getTime() + CLOSURE_DAYS * DAY))}.
+            {confirm && <b className="block">The name didn&apos;t match.</b>}
+          </span>
+          <input type="hidden" name="id" value={org.id} />
+          <input name="confirmName" className="input w-56 py-1.5" placeholder={`Type "${org.name}"`} required aria-label="Business name to confirm" />
+          <button className="btn-danger">Delete all data now</button>
+        </form>
+      )}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Signed up" value={fmtDate(org.createdAt)} sub={org.trialEndsAt ? `Trial ends ${fmtDate(org.trialEndsAt)}` : undefined} />
         <Stat label="Takings, 30 days" value={formatGBP(s30._sum.totalPence ?? 0)} sub={`${s30._count} sales`} />
@@ -86,7 +100,17 @@ export default async function PlatformShop({ params }: { params: Promise<{ id: s
               {org.users.map((u) => (
                 <li key={u.id} className={u.active ? "" : "opacity-50"}>
                   <span className="font-medium">{u.name}</span> <span className="text-xs text-slate-500">{u.role.toLowerCase()}</span>
-                  {u.email && <div className="text-xs"><a href={`mailto:${u.email}`} className="text-brand-700">{u.email}</a></div>}
+                  {u.email && (
+                    <div className="text-xs">
+                      <a href={`mailto:${u.email}`} className="text-brand-700">{u.email}</a>{" "}
+                      {u.emailVerifiedAt ? <span className="text-emerald-700">confirmed</span> : <span className="text-amber-700">not confirmed</span>}
+                    </div>
+                  )}
+                  {u.totpEnabledAt && (
+                    <form action={platformResetMfa} className="text-xs text-slate-500">
+                      Two-step sign-in on. <input type="hidden" name="userId" value={u.id} /><button className="font-semibold text-red-700 underline">Switch off (lost phone)</button>
+                    </form>
+                  )}
                 </li>
               ))}
             </ul>

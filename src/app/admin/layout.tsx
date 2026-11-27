@@ -7,10 +7,14 @@ import { Logo } from "@/components/Logo";
 import { AdminNav } from "./AdminNav";
 import { accessFor, planById } from "@/lib/plans";
 import { isPlatformAdmin } from "@/lib/server/billing";
+import { acceptTerms } from "@/lib/server/actions/account";
+import { ResendVerification } from "./account/ResendVerification";
+import { LEGAL } from "@/lib/legal";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const s = await requireAdmin("MANAGER", { allowLocked: true });
-  const org = await db.organization.findUnique({ where: { id: s.orgId }, select: { name: true, plan: true, billingStatus: true, trialEndsAt: true } });
+  const org = await db.organization.findUnique({ where: { id: s.orgId }, select: { name: true, plan: true, billingStatus: true, trialEndsAt: true, termsVersion: true } });
+  const me = await db.user.findUnique({ where: { id: s.userId }, select: { email: true, emailVerifiedAt: true } });
   const access = org ? accessFor(org) : null;
   const platform = await isPlatformAdmin();
   const banner = !access || platform ? null
@@ -29,7 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav role={s.role} platform={platform} />
         <div className="hidden border-t border-slate-100 p-4 lg:block">
           <Link href="/till" className="btn-primary mb-3 w-full">Open till</Link>
-          <div className="text-xs text-slate-500">{s.name} · {s.role.toLowerCase()}</div>
+          <Link href="/admin/account" className="block text-xs text-slate-500 hover:text-slate-900">{s.name} · {s.role.toLowerCase()} · My account</Link>
           <form action={logout}><button className="mt-1 text-xs font-semibold text-slate-600 hover:text-slate-900">Sign out</button></form>
           <PoweredBy className="mt-4" />
         </div>
@@ -40,6 +44,22 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <span>{banner.text}</span>
             {s.role === "OWNER" && <Link href="/admin/billing" className="font-semibold underline">Plan & billing</Link>}
           </div>
+        )}
+        {me?.email && !me.emailVerifiedAt && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+            <span>Please confirm your email address. We sent a link to <b>{me.email}</b>.</span>
+            <ResendVerification className="font-semibold underline" />
+          </div>
+        )}
+        {s.role === "OWNER" && org && org.termsVersion !== LEGAL.version && (
+          <form action={acceptTerms} className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
+            <span>
+              Please review and accept our <Link href="/terms" target="_blank" className="underline">terms</Link>,{" "}
+              <Link href="/privacy" target="_blank" className="underline">privacy policy</Link> and{" "}
+              <Link href="/dpa" target="_blank" className="underline">data processing agreement</Link>.
+            </span>
+            <button className="btn-primary py-1.5 text-sm">I accept</button>
+          </form>
         )}
         {children}
       </main>

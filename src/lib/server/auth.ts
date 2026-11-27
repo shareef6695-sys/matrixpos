@@ -43,7 +43,7 @@ export async function orgAllowed(orgId: string) {
   if (accessFor(org).allowed) return true;
   const platform = (process.env.PLATFORM_ADMIN_EMAILS ?? "").toLowerCase().split(/[,;\s]+/).filter(Boolean);
   if (!platform.length) return false;
-  const users = await db.user.findMany({ where: { organizationId: orgId, role: "OWNER", email: { not: null } }, select: { email: true } });
+  const users = await db.user.findMany({ where: { organizationId: orgId, role: "OWNER", email: { not: null }, emailVerifiedAt: { not: null } }, select: { email: true } });
   return users.some((u) => platform.includes(u.email!.toLowerCase()));
 }
 

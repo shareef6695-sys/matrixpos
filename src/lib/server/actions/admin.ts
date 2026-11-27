@@ -269,7 +269,8 @@ export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
     if (u.role === "OWNER" && s.role !== "OWNER") return { error: "Only an owner can edit an owner" };
     if (u.id === s.userId && role !== u.role) return { error: "You can't change your own role" };
     await db.$transaction([
-      db.user.update({ where: { id }, data }),
+      // A new email address has to be confirmed again.
+      db.user.update({ where: { id }, data: { ...data, ...(email !== u.email ? { emailVerifiedAt: null } : {}) } }),
       db.userStore.deleteMany({ where: { userId: id } }),
       db.userStore.createMany({ data: validStores.map((v) => ({ userId: id, storeId: v.id })) }),
     ]);

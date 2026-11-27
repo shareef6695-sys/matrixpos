@@ -82,6 +82,8 @@ async function main() {
       plan: "BUSINESS",
       billingStatus: "ACTIVE",
       billingNote: "Demo shop",
+      termsAcceptedAt: new Date(),
+      termsVersion: "2026-11-27",
       receiptFooter: "Thank you for shopping with us! Returns accepted within 28 days with receipt.",
       settings: { create: { enableLoyalty: true } },
     },
@@ -98,8 +100,8 @@ async function main() {
 
   const pin = (p: string) => bcrypt.hashSync(p, 10);
   const staff = [
-    { name: "Demo Owner", email: "owner@demo.matrixpos.uk", passwordHash: bcrypt.hashSync("demo1234", 10), pinHash: pin("9999"), role: "OWNER" as const },
-    { name: "Priya (Manager)", email: "manager@demo.matrixpos.uk", passwordHash: bcrypt.hashSync("demo1234", 10), pinHash: pin("2222"), role: "MANAGER" as const },
+    { name: "Demo Owner", email: "owner@demo.matrixpos.uk", passwordHash: bcrypt.hashSync("demo1234", 10), pinHash: pin("9999"), role: "OWNER" as const, emailVerifiedAt: new Date() },
+    { name: "Priya (Manager)", email: "manager@demo.matrixpos.uk", passwordHash: bcrypt.hashSync("demo1234", 10), pinHash: pin("2222"), role: "MANAGER" as const, emailVerifiedAt: new Date() },
     { name: "Tom (Supervisor)", pinHash: pin("3333"), role: "SUPERVISOR" as const },
     { name: "Amy (Cashier)", pinHash: pin("1111"), role: "CASHIER" as const },
   ];

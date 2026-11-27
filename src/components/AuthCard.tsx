@@ -13,6 +13,10 @@ export function AuthCard({ title, children, footer }: { title: string; children:
         </div>
         {footer && <div className="mt-4 text-center text-sm text-slate-600">{footer}</div>}
         <PoweredBy className="mt-6 text-center" />
+        <div className="mt-2 flex justify-center gap-3 text-xs text-slate-500">
+          <Link href="/privacy" className="hover:text-slate-800">Privacy</Link>
+          <Link href="/terms" className="hover:text-slate-800">Terms</Link>
+        </div>
       </div>
     </main>
   );

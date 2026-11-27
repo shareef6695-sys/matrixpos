@@ -16,6 +16,7 @@ const items: [string, string, ("OWNER" | "MANAGER")[]][] = [
   ["/admin/stores", "Stores & tills", ["OWNER"]],
   ["/admin/settings", "Settings", ["OWNER"]],
   ["/admin/billing", "Plan & billing", ["OWNER"]],
+  ["/admin/account", "My account", ["OWNER", "MANAGER"]],
 ];
 
 export function AdminNav({ role, platform = false }: { role: string; platform?: boolean }) {

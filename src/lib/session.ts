@@ -4,11 +4,14 @@ import { SignJWT, jwtVerify } from "jose";
 export const ADMIN_COOKIE = "mpos_admin";
 export const DEVICE_COOKIE = "mpos_device";
 export const TILL_COOKIE = "mpos_till";
+export const MFA_COOKIE = "mpos_mfa";
 
 export type Role = "OWNER" | "MANAGER" | "SUPERVISOR" | "CASHIER";
 
 export interface AdminSession { kind: "admin"; userId: string; orgId: string; role: Role; name: string }
 export interface DeviceSession { kind: "device"; orgId: string; storeId: string; registerId: string }
+/** Password was right; waiting for the two-step code. */
+export interface MfaSession { kind: "mfa"; userId: string; next: string }
 export interface TillSession { kind: "till"; userId: string; orgId: string; registerId: string; role: Role; name: string }
 
 function key() {
@@ -17,7 +20,7 @@ function key() {
   return new TextEncoder().encode(s);
 }
 
-export async function sign(payload: AdminSession | DeviceSession | TillSession, maxAgeSeconds: number) {
+export async function sign(payload: AdminSession | DeviceSession | TillSession | MfaSession, maxAgeSeconds: number) {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -38,6 +41,7 @@ export async function verify<T extends { kind: string }>(token: string | undefin
 export const ADMIN_MAX_AGE = 60 * 60 * 12;
 export const DEVICE_MAX_AGE = 60 * 60 * 24 * 365;
 export const TILL_MAX_AGE = 60 * 60 * 14;
+export const MFA_MAX_AGE = 60 * 5;
 
 export const ROLE_RANK: Record<Role, number> = { CASHIER: 0, SUPERVISOR: 1, MANAGER: 2, OWNER: 3 };
 export const atLeast = (role: Role, min: Role) => ROLE_RANK[role] >= ROLE_RANK[min];

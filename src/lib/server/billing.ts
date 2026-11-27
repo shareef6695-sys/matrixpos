@@ -54,8 +54,9 @@ export async function isPlatformAdmin() {
   if (!s) return false;
   const emails = platformEmails();
   if (!emails.length) return false;
-  const u = await db.user.findUnique({ where: { id: s.userId }, select: { email: true, active: true, role: true } });
-  return !!u?.email && u.active && u.role === "OWNER" && emails.includes(u.email.toLowerCase());
+  const u = await db.user.findUnique({ where: { id: s.userId }, select: { email: true, active: true, role: true, emailVerifiedAt: true } });
+  // The email must be confirmed, so nobody can claim HQ access by signing up with your address first.
+  return !!u?.email && !!u.emailVerifiedAt && u.active && u.role === "OWNER" && emails.includes(u.email.toLowerCase());
 }
 
 /** The platform pages answer 404 to everyone else, so they can't be discovered. */
