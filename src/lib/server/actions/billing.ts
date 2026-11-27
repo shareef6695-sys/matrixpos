@@ -98,44 +98,51 @@ export async function payByCard(_: FormState, f: FormData): Promise<FormState> {
   const org = await db.organization.findUniqueOrThrow({ where: { id: s.orgId } });
   if (org.slug === "demo-mart") return { error: "The demo shop can't buy a plan. Create your own shop to try it." };
   if (org.closureRequestedAt) return { error: "Keep your account first, then choose a plan." };
-  const st = stripe();
-  const price = await priceFor(plan, cycle);
+  let url: string;
+  try {
+    const st = stripe();
+    const price = await priceFor(plan, cycle);
 
-  // Already paying by card: switch the subscription to the new plan, with a pro-rata adjustment on the next invoice.
-  if (org.stripeSubscriptionId) {
-    const sub = await st.subscriptions.retrieve(org.stripeSubscriptionId);
-    if (sub.status !== "canceled") {
-      await st.subscriptions.update(sub.id, { items: [{ id: sub.items.data[0].id, price }], proration_behavior: "create_prorations", cancel_at_period_end: false });
-      await syncSubscription(await st.subscriptions.retrieve(sub.id));
-      await audit(s.orgId, s.userId, "billing.card.change", { plan, cycle });
-      revalidatePath("/admin", "layout");
-      return { ok: `Done. You're now on ${planById(plan).name} (${cycle.toLowerCase()}). The difference is adjusted on your next card payment.` };
+    // Already paying by card: switch the subscription to the new plan, with a pro-rata adjustment on the next invoice.
+    if (org.stripeSubscriptionId) {
+      const sub = await st.subscriptions.retrieve(org.stripeSubscriptionId);
+      if (sub.status !== "canceled") {
+        await st.subscriptions.update(sub.id, { items: [{ id: sub.items.data[0].id, price }], proration_behavior: "create_prorations", cancel_at_period_end: false });
+        await syncSubscription(await st.subscriptions.retrieve(sub.id));
+        await audit(s.orgId, s.userId, "billing.card.change", { plan, cycle });
+        revalidatePath("/admin", "layout");
+        return { ok: `Done. You're now on ${planById(plan).name} (${cycle.toLowerCase()}). The difference is adjusted on your next card payment.` };
+      }
     }
-  }
 
-  const user = await db.user.findUniqueOrThrow({ where: { id: s.userId } });
-  let customer = org.stripeCustomerId;
-  if (!customer) {
-    const c = await st.customers.create({ name: org.name, email: user.email ?? undefined, metadata: { orgId: org.id } });
-    customer = c.id;
-    await db.organization.update({ where: { id: org.id }, data: { stripeCustomerId: customer } });
+    const user = await db.user.findUniqueOrThrow({ where: { id: s.userId } });
+    let customer = org.stripeCustomerId;
+    if (!customer) {
+      const c = await st.customers.create({ name: org.name, email: user.email ?? undefined, metadata: { orgId: org.id } });
+      customer = c.id;
+      await db.organization.update({ where: { id: org.id }, data: { stripeCustomerId: customer } });
+    }
+    const base = await appUrl();
+    const session = await st.checkout.sessions.create({
+      mode: "subscription",
+      customer,
+      client_reference_id: org.id,
+      line_items: [{ price, quantity: 1, tax_rates: [await vatRate()] }],
+      subscription_data: { metadata: { orgId: org.id } },
+      metadata: { orgId: org.id, plan, cycle },
+      billing_address_collection: "required",
+      customer_update: { address: "auto", name: "auto" },
+      tax_id_collection: { enabled: true },
+      allow_promotion_codes: true,
+      success_url: `${base}/admin/billing?card=success`,
+      cancel_url: `${base}/admin/billing?card=cancelled`,
+    });
+    url = session.url!;
+  } catch (e) {
+    console.error("Stripe checkout failed", e);
+    return { error: `Card payment couldn't start: ${e instanceof Error ? e.message : "unknown error"}. Please try again, or request an invoice.` };
   }
-  const base = await appUrl();
-  const session = await st.checkout.sessions.create({
-    mode: "subscription",
-    customer,
-    client_reference_id: org.id,
-    line_items: [{ price, quantity: 1, tax_rates: [await vatRate()] }],
-    subscription_data: { metadata: { orgId: org.id } },
-    metadata: { orgId: org.id, plan, cycle },
-    billing_address_collection: "required",
-    customer_update: { address: "auto", name: "auto" },
-    tax_id_collection: { enabled: true },
-    allow_promotion_codes: true,
-    success_url: `${base}/admin/billing?card=success`,
-    cancel_url: `${base}/admin/billing?card=cancelled`,
-  });
-  redirect(session.url!);
+  redirect(url);
 }
 
 /** Stripe's own page where the owner updates their card, downloads invoices or cancels. */
@@ -143,6 +150,12 @@ export async function openCardPortal() {
   const s = await requireAdmin("OWNER", { allowLocked: true });
   const org = await db.organization.findUniqueOrThrow({ where: { id: s.orgId } });
   if (!stripeBillingEnabled() || !org.stripeCustomerId) redirect("/admin/billing");
-  const portal = await stripe().billingPortal.sessions.create({ customer: org.stripeCustomerId, return_url: `${await appUrl()}/admin/billing` });
-  redirect(portal.url);
+  let url = "/admin/billing?card=portal-error";
+  try {
+    const portal = await stripe().billingPortal.sessions.create({ customer: org.stripeCustomerId, return_url: `${await appUrl()}/admin/billing` });
+    url = portal.url;
+  } catch (e) {
+    console.error("Stripe portal failed", e);
+  }
+  redirect(url);
 }

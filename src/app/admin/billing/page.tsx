@@ -37,6 +37,7 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
           <strong>Thank you, your card payment went through.</strong> Your plan updates within a minute. Receipts are emailed to you by Stripe.
         </div>
       )}
+      {card === "portal-error" && <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">The card management page couldn&apos;t open. Please try again in a minute.</div>}
       {card === "cancelled" && <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">Card payment cancelled. Nothing was charged.</div>}
       {org.closureRequestedAt && (
         <form action={cancelClosure} className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
