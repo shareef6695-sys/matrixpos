@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/server/auth";
 import { db } from "@/lib/server/db";
 import { PageHeader } from "@/components/admin";
 import { SettingsForm } from "./SettingsForm";
+import { PLAN_FEATURES, planAllows } from "@/lib/plans";
 
 export const metadata = { title: "Settings" };
 
@@ -18,6 +19,7 @@ export default async function Settings() {
       <SettingsForm
         org={{ name: org!.name, vatNumber: org!.vatNumber ?? "", companyNo: org!.companyNo ?? "", receiptFooter: org!.receiptFooter ?? "" }}
         flags={flags}
+        locked={PLAN_FEATURES.filter((x) => !planAllows(org!.plan, x))}
         keys={{ stripe: !!stripeSecretKey, sumup: !!sumupApiKey, sumupMerchant: sumupMerchantCode ?? "", dojo: !!dojoApiKey }}
       />
     </div>

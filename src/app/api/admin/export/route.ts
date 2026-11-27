@@ -2,14 +2,8 @@ import { db } from "@/lib/server/db";
 import { getAdmin } from "@/lib/server/auth";
 import { atLeast } from "@/lib/session";
 import { londonRange, londonDate } from "@/lib/dates";
+import { csv } from "@/lib/csv";
 
-const esc = (v: unknown) => {
-  const s = v == null ? "" : String(v);
-  // Prefix formula-like cells so spreadsheets don't execute them (CSV injection).
-  const safe = /^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s) ? `'${s}` : s;
-  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-};
-const csv = (rows: unknown[][]) => rows.map((r) => r.map(esc).join(",")).join("\r\n");
 const p = (n: number | null | undefined) => (n == null ? "" : (n / 100).toFixed(2));
 const VAT = { STANDARD: "20", REDUCED: "5", ZERO: "0", EXEMPT: "exempt" } as const;
 

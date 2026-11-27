@@ -4,10 +4,11 @@ import { SignupForm } from "./SignupForm";
 
 export const metadata = { title: "Create your shop" };
 
-export default function SignupPage() {
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
+  const { plan } = await searchParams;
   return (
     <AuthCard title="Create your shop" footer={<>Already have an account? <Link className="font-semibold text-brand-700" href="/login">Sign in</Link></>}>
-      <SignupForm />
+      <SignupForm plan={["STARTER", "BUSINESS", "ENTERPRISE"].includes(plan ?? "") ? plan : "BUSINESS"} />
     </AuthCard>
   );
 }

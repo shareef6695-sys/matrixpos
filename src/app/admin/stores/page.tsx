@@ -5,7 +5,8 @@ import { saveStore, saveRegister } from "@/lib/server/actions/admin";
 
 export const metadata = { title: "Stores & tills" };
 
-export default async function Stores() {
+export default async function Stores({ searchParams }: { searchParams: Promise<{ limit?: string }> }) {
+  const { limit } = await searchParams;
   const s = await requireAdmin("OWNER");
   const [stores, settings] = await Promise.all([
     db.store.findMany({ where: { organizationId: s.orgId }, include: { registers: { orderBy: { number: "asc" } } }, orderBy: { name: "asc" } }),
@@ -26,6 +27,11 @@ export default async function Stores() {
   return (
     <div>
       <PageHeader title="Stores & tills" sub="Each branch has its own stock and tills. Products and offers are shared." />
+      {limit && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {limit} <a href="/admin/billing" className="font-semibold underline">See plans</a>
+        </div>
+      )}
       <div className="space-y-6">
         {stores.map((st) => (
           <div key={st.id} className="card">

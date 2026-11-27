@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { cookieOpts } from "@/lib/server/auth";
+import { cookieOpts, orgAllowed } from "@/lib/server/auth";
 import { TILL_COOKIE, TILL_MAX_AGE, sign } from "@/lib/session";
 import { deviceContext, userByPin, json, fail, audit } from "@/lib/server/till";
 
@@ -8,6 +8,7 @@ const attempts = new Map<string, { n: number; until: number }>();
 export async function POST(req: Request) {
   const ctx = await deviceContext();
   if (!ctx) return fail("This device is not set up as a till", 401);
+  if (!(await orgAllowed(ctx.device.orgId))) return fail("This shop's MatrixPOS subscription isn't active. The owner can sort it out under Billing in the back office.", 402);
   const key = ctx.register.id;
   const a = attempts.get(key);
   if (a && a.until > Date.now()) return fail("Too many wrong PINs. Wait a minute and try again.", 429);

@@ -15,9 +15,10 @@ const items: [string, string, ("OWNER" | "MANAGER")[]][] = [
   ["/admin/staff", "Staff", ["OWNER", "MANAGER"]],
   ["/admin/stores", "Stores & tills", ["OWNER"]],
   ["/admin/settings", "Settings", ["OWNER"]],
+  ["/admin/billing", "Plan & billing", ["OWNER"]],
 ];
 
-export function AdminNav({ role }: { role: string }) {
+export function AdminNav({ role, platform = false }: { role: string; platform?: boolean }) {
   const path = usePathname();
   return (
     <nav className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible">
@@ -29,6 +30,9 @@ export function AdminNav({ role }: { role: string }) {
           </Link>
         );
       })}
+      {platform && (
+        <Link href="/platform" className="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50">MatrixPOS HQ</Link>
+      )}
     </nav>
   );
 }

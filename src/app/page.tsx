@@ -1,5 +1,15 @@
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
+import { PricingCards } from "@/components/Pricing";
+import { TRIAL_DAYS } from "@/lib/plans";
+
+const faqs = [
+  ["Do I need a card to start?", `No. Every plan is free for ${TRIAL_DAYS} days and we don't ask for card details. Pick a plan when you're happy.`],
+  ["Do you take a cut of my card payments?", "No. You keep your own card provider (Stripe, SumUp, Dojo or any standalone machine) and its rates. MatrixPOS is a flat monthly fee."],
+  ["Do I need to buy special hardware?", "No. Use the tablet, laptop or till PC you already have, with any USB or Bluetooth barcode scanner and receipt printer."],
+  ["Can I change plan later?", "Yes, up or down at any time. Your products, sales and accounts stay exactly where they are."],
+  ["Where is my data kept?", "On servers in the United Kingdom, backed up every night."],
+];
 
 const features = [
   ["Fast till", "Scan any USB or Bluetooth barcode scanner, quick-pick buttons for loose items, quantity shortcuts like 6*barcode."],
@@ -18,6 +28,7 @@ export default function Home() {
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
         <Logo className="text-xl" />
         <nav className="flex gap-2">
+          <a href="#pricing" className="btn-secondary hidden sm:inline-flex">Pricing</a>
           <Link href="/till" className="btn-secondary">Open till</Link>
           <Link href="/login" className="btn-secondary">Sign in</Link>
           <Link href="/signup" className="btn-primary hidden sm:inline-flex">Start free</Link>
@@ -34,6 +45,7 @@ export default function Home() {
           <Link href="/signup" className="btn-primary px-6 py-3 text-base">Create your shop</Link>
           <Link href="/login" className="btn-secondary px-6 py-3 text-base">Try the demo</Link>
         </div>
+        <p className="mt-4 text-sm text-slate-500">From £12 a month. {TRIAL_DAYS}-day free trial, no card needed.</p>
       </section>
       <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-20 sm:grid-cols-2 lg:grid-cols-4">
         {features.map(([t, d]) => (
@@ -42,6 +54,30 @@ export default function Home() {
             <p className="mt-2 text-sm text-slate-600">{d}</p>
           </div>
         ))}
+      </section>
+      <section id="pricing" className="scroll-mt-6 border-t border-slate-200 bg-white py-20">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="mx-auto mb-10 max-w-2xl text-center">
+            <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Simple pricing, less than the big names</h2>
+            <p className="mt-3 text-slate-600">One flat price per business, not per till. No contracts, no setup fees and no share of your card takings.</p>
+          </div>
+          <PricingCards />
+          <p className="mt-6 text-center text-xs text-slate-500">Prices exclude VAT. Yearly plans are paid up front.</p>
+        </div>
+      </section>
+      <section className="mx-auto max-w-3xl px-4 py-16">
+        <h2 className="mb-6 text-center text-2xl font-bold text-slate-900">Questions</h2>
+        <div className="space-y-3">
+          {faqs.map(([q, a]) => (
+            <details key={q} className="card group">
+              <summary className="cursor-pointer list-none font-semibold text-slate-900">{q}</summary>
+              <p className="mt-2 text-sm text-slate-600">{a}</p>
+            </details>
+          ))}
+        </div>
+        <div className="mt-10 text-center">
+          <Link href="/signup" className="btn-primary px-6 py-3 text-base">Start your free trial</Link>
+        </div>
       </section>
       <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-500">
         MatrixPOS · Data hosted in the United Kingdom · UK GDPR ready

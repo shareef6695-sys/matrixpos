@@ -8,6 +8,7 @@ import { nextCounter, audit } from "@/lib/server/till";
 import { postSaleVoid, postStockAdjustment } from "@/lib/server/accounting";
 import { parseGBP } from "@/lib/pos/money";
 import type { FormState } from "./auth";
+import { overLimit, clampFeatures } from "@/lib/server/billing";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const optional = (f: FormData, k: string) => str(f, k) || null;
@@ -273,6 +274,8 @@ export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
       db.userStore.createMany({ data: validStores.map((v) => ({ userId: id, storeId: v.id })) }),
     ]);
   } else {
+    const limit = await overLimit(s.orgId, "staff");
+    if (limit) return { error: limit };
     await db.user.create({ data: { ...data, pinHash: data.pinHash!, organizationId: s.orgId, stores: { create: validStores.map((v) => ({ storeId: v.id })) } } });
   }
   await audit(s.orgId, s.userId, id ? "staff.update" : "staff.create", { name, role });
@@ -292,6 +295,8 @@ export async function saveStore(f: FormData) {
   if (!data.name) return;
   if (id) await db.store.updateMany({ where: { id, organizationId: s.orgId }, data });
   else {
+    const limit = await overLimit(s.orgId, "store");
+    if (limit) redirect(`/admin/stores?limit=${encodeURIComponent(limit)}`);
     const store = await db.store.create({ data: { ...data, organizationId: s.orgId, registers: { create: { name: "Till 1", number: 1 } } } }).catch(() => null);
     if (store) {
       // Owners and managers can work in every store.
@@ -311,6 +316,8 @@ export async function saveRegister(f: FormData) {
   const data = { name: str(f, "name") || "Till", stripeReaderId: optional(f, "stripeReaderId"), sumupReaderId: optional(f, "sumupReaderId"), dojoTerminalId: optional(f, "dojoTerminalId") };
   if (id) await db.register.updateMany({ where: { id, storeId }, data });
   else {
+    const limit = await overLimit(s.orgId, "register");
+    if (limit) redirect(`/admin/stores?limit=${encodeURIComponent(limit)}`);
     const number = Math.max(0, ...store.registers.map((r) => r.number)) + 1;
     await db.register.create({ data: { ...data, name: str(f, "name") || `Till ${number}`, number, storeId } });
   }
@@ -326,14 +333,14 @@ export async function saveSettings(_: FormState, f: FormData): Promise<FormState
     const v = str(f, k);
     return v === "" ? undefined : v === "-" ? null : v; // blank keeps the saved key, "-" clears it
   };
-  await db.organization.update({
+  const org = await db.organization.update({
     where: { id: s.orgId },
     data: { name: str(f, "name") || undefined, vatNumber: optional(f, "vatNumber"), companyNo: optional(f, "companyNo"), receiptFooter: optional(f, "receiptFooter") },
   });
   await db.orgSettings.upsert({
     where: { organizationId: s.orgId },
     create: { organizationId: s.orgId },
-    update: {
+    update: clampFeatures(org.plan, {
       enableCash: on("enableCash"), enableCardManual: on("enableCardManual"), enableStripeTerminal: on("enableStripeTerminal"), enableSumUp: on("enableSumUp"), enableDojo: on("enableDojo"),
       enablePromotions: on("enablePromotions"), enableAgeCheck: on("enableAgeCheck"), enableWeighedItems: on("enableWeighedItems"), enableStockControl: on("enableStockControl"),
       enableLoyalty: on("enableLoyalty"), enableOfflineMode: on("enableOfflineMode"), enableAccounting: on("enableAccounting"),
@@ -342,7 +349,7 @@ export async function saveSettings(_: FormState, f: FormData): Promise<FormState
       ageCheckThreshold: [21, 25].includes(parseInt(str(f, "ageCheckThreshold"), 10)) ? parseInt(str(f, "ageCheckThreshold"), 10) : 25,
       loyaltyPointsPerPound: Math.max(0, Math.min(100, parseInt(str(f, "loyaltyPointsPerPound"), 10) || 1)),
       stripeSecretKey: secret("stripeSecretKey"), sumupApiKey: secret("sumupApiKey"), sumupMerchantCode: secret("sumupMerchantCode"), dojoApiKey: secret("dojoApiKey"),
-    },
+    }),
   });
   await audit(s.orgId, s.userId, "settings.update");
   revalidatePath("/admin/settings");

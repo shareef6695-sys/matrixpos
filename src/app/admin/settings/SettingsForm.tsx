@@ -1,5 +1,5 @@
 "use client";
-import { useActionState } from "react";
+import { createContext, useActionState, useContext } from "react";
 import { saveSettings } from "@/lib/server/actions/admin";
 
 type Flags = Record<string, unknown> & {
@@ -8,20 +8,27 @@ type Flags = Record<string, unknown> & {
   requireManagerForRefund: boolean; requireManagerForVoid: boolean; embeddedBarcodeMode: string; ageCheckThreshold: number; loyaltyPointsPerPound: number;
 };
 
+const Locked = createContext<string[]>([]);
+
 function Toggle({ name, label, desc, on }: { name: string; label: string; desc: string; on: boolean }) {
+  const locked = useContext(Locked).includes(name);
   return (
-    <label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg p-3 hover:bg-slate-50">
-      <span><span className="block font-medium">{label}</span><span className="text-sm text-slate-500">{desc}</span></span>
-      <input type="checkbox" name={name} defaultChecked={on} className="peer sr-only" />
+    <label className={`flex items-start justify-between gap-4 rounded-lg p-3 ${locked ? "opacity-60" : "cursor-pointer hover:bg-slate-50"}`}>
+      <span>
+        <span className="block font-medium">{label}{locked && <a href="/admin/billing" className="badge ml-2 bg-amber-100 text-amber-800">Business plan</a>}</span>
+        <span className="text-sm text-slate-500">{desc}</span>
+      </span>
+      <input type="checkbox" name={name} defaultChecked={on && !locked} disabled={locked} className="peer sr-only" />
       <span className="relative mt-1 h-6 w-11 shrink-0 rounded-full bg-slate-300 transition after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition peer-checked:bg-brand-600 peer-checked:after:translate-x-5" />
     </label>
   );
 }
 
-export function SettingsForm({ org, flags: f, keys }: { org: { name: string; vatNumber: string; companyNo: string; receiptFooter: string }; flags: Flags; keys: { stripe: boolean; sumup: boolean; sumupMerchant: string; dojo: boolean } }) {
+export function SettingsForm({ org, flags: f, keys, locked = [] }: { org: { name: string; vatNumber: string; companyNo: string; receiptFooter: string }; flags: Flags; keys: { stripe: boolean; sumup: boolean; sumupMerchant: string; dojo: boolean }; locked?: string[] }) {
   const [state, action, pending] = useActionState(saveSettings, undefined);
   const keyHint = (set: boolean) => (set ? "Saved. Leave blank to keep, or type - to remove." : "Not set");
   return (
+    <Locked.Provider value={locked}>
     <form action={action} className="grid max-w-5xl gap-6 lg:grid-cols-2">
       <div className="card space-y-3 lg:col-span-2">
         <h2 className="font-semibold">Business details (printed on receipts)</h2>
@@ -82,5 +89,6 @@ export function SettingsForm({ org, flags: f, keys }: { org: { name: string; vat
         {state?.error && <span className="text-sm text-red-600">{state.error}</span>}
       </div>
     </form>
+    </Locked.Provider>
   );
 }

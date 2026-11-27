@@ -50,6 +50,22 @@ The connection string includes `connection_limit=5`, which keeps Vercel's server
 4. **Staff:** give each person a role and their own PIN.
 5. On each till device, sign in as the owner or a manager, open `/till`, and pick the till. Use the browser's **Install app** option to make it full screen.
 
+## Pricing and your HQ dashboard
+
+Plans and prices live in `src/lib/plans.ts`. Change them there and they update on the landing page, the sign-up form and the billing page.
+
+Every new business gets a 14-day free trial. When the trial ends, or you suspend a business, its owner can only see **Plan & billing** and its tills can't sign in. Overdue businesses keep working but see a reminder.
+
+To open the HQ dashboard at `/platform`:
+
+1. Sign up for a MatrixPOS account with your own email (this is your own business on the system).
+2. In Vercel, add `PLATFORM_ADMIN_EMAILS` with that email (comma separate several) and redeploy.
+3. Sign in and click **MatrixPOS HQ** in the menu.
+
+The dashboard shows every business, sign-ups per week, who is trading, takings, trials ending, monthly revenue and plan requests. On each business you can mark it paid, extend its trial, change its plan or suspend it. Your own business and the demo shop are never locked and are left out of the numbers. Everyone else gets a 404 at `/platform`.
+
+Optional: `BILLING_CONTACT_EMAIL` is shown to shop owners on the billing page (defaults to the first platform email).
+
 ## Card terminals
 
 Each business enters its own keys in **Settings**, and links a reader to each till in **Stores & tills**:

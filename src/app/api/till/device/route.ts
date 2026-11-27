@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { db } from "@/lib/server/db";
-import { getAdmin, cookieOpts } from "@/lib/server/auth";
+import { getAdmin, cookieOpts, orgAllowed } from "@/lib/server/auth";
 import { DEVICE_COOKIE, DEVICE_MAX_AGE, TILL_COOKIE, atLeast, sign } from "@/lib/session";
 import { json, fail } from "@/lib/server/till";
 
@@ -16,6 +16,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const admin = await getAdmin();
   if (!admin || !atLeast(admin.role, "MANAGER")) return fail("Sign in as a manager to set up this till", 401);
+  if (!(await orgAllowed(admin.orgId))) return fail("This shop's MatrixPOS subscription isn't active. See Billing in the back office.", 402);
   const { registerId } = await req.json().catch(() => ({}));
   const register = await db.register.findFirst({ where: { id: String(registerId), store: { organizationId: admin.orgId } } });
   if (!register) return fail("Till not found", 404);

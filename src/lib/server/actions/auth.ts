@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { ensureChart } from "@/lib/server/accounting";
+import { applyPlanToSettings, platformEmails } from "@/lib/server/billing";
+import { TRIAL_DAYS } from "@/lib/plans";
 import { compare, hash, cookieOpts } from "@/lib/server/auth";
 import { ADMIN_COOKIE, ADMIN_MAX_AGE, DEVICE_COOKIE, TILL_COOKIE, sign } from "@/lib/session";
 
@@ -37,6 +39,7 @@ const signupSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   pin: z.string().regex(/^\d{4,6}$/, "PIN must be 4 to 6 digits"),
   vatNumber: z.string().trim().max(14).optional(),
+  plan: z.enum(["STARTER", "BUSINESS", "ENTERPRISE"]).default("BUSINESS"),
 });
 
 export async function signup(_: FormState, form: FormData): Promise<FormState> {
@@ -52,6 +55,10 @@ export async function signup(_: FormState, form: FormData): Promise<FormState> {
   const org = await db.organization.create({
     data: {
       name: d.business, slug, vatNumber: d.vatNumber || null,
+      // The platform owner's own business is always active; everyone else starts on a free trial.
+      ...(platformEmails().includes(d.email)
+        ? { plan: "ENTERPRISE" as const, billingStatus: "ACTIVE" as const, billingNote: "Platform owner" }
+        : { plan: d.plan, billingStatus: "TRIAL" as const, trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000) }),
       settings: { create: {} },
       stores: { create: { name: d.storeName, code: "S1", postcode: d.postcode || null, registers: { create: { name: "Till 1", number: 1 } } } },
       categories: { create: [{ name: "General", sortOrder: 0 }] },
@@ -59,6 +66,7 @@ export async function signup(_: FormState, form: FormData): Promise<FormState> {
     include: { stores: true },
   });
   await ensureChart(org.id);
+  await applyPlanToSettings(org.id, org.plan);
   const user = await db.user.create({
     data: {
       organizationId: org.id, name: d.name, email: d.email, role: "OWNER",

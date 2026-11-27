@@ -89,6 +89,14 @@ model Organization {
   currency     String   @default("GBP")
   createdAt    DateTime @default(now())
 
+  // Subscription, managed by the platform owner at /platform.
+  plan          Plan          @default(BUSINESS)
+  billingStatus BillingStatus @default(TRIAL)
+  billingCycle  BillingCycle  @default(MONTHLY)
+  trialEndsAt   DateTime?
+  paidUntil     DateTime?
+  billingNote   String?
+
   // Feature activation: each business switches on what it needs.
   settings OrgSettings?
 
@@ -595,4 +603,23 @@ model Bill {
   createdAt      DateTime     @default(now())
 
   @@index([organizationId, date])
+}
+
+enum Plan {
+  STARTER
+  BUSINESS
+  ENTERPRISE
+}
+
+enum BillingStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
 }
