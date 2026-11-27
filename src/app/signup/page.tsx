@@ -3,7 +3,11 @@ import { AuthCard } from "@/components/AuthCard";
 import { SignupForm } from "./SignupForm";
 import { seller } from "@/lib/legal";
 
-export const metadata = { title: "Create your shop" };
+export const metadata = {
+  title: "Start your free trial",
+  description: "Create your MatrixPOS shop in minutes. 14-day free trial, no card needed. POS from £12 a month for UK shops and supermarkets.",
+  alternates: { canonical: "/signup" },
+};
 
 export default async function SignupPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
   const { plan } = await searchParams;

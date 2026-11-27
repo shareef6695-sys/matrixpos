@@ -180,7 +180,7 @@ function PinScreen({ boot, online, onDone }: { boot: Bootstrap; online: boolean;
           <a href="/admin" className="hover:text-slate-700">Back office</a>
           <button onClick={async () => { if (confirm("Unlink this device from the till?")) { await fetch("/api/till/device", { method: "DELETE" }); location.reload(); } }} className="hover:text-slate-700">Unlink device</button>
         </div>
-        <PoweredBy className="mt-4 text-center" />
+        <PoweredBy className="mt-4 text-center" link={false} />
       </div>
     </div>
   );

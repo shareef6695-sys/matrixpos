@@ -3,7 +3,7 @@ import { AuthCard } from "@/components/AuthCard";
 import { db } from "@/lib/server/db";
 import { consumeToken } from "@/lib/server/tokens";
 
-export const metadata = { title: "Confirm your email" };
+export const metadata = { title: "Confirm your email", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 export default async function VerifyEmail({ searchParams }: { searchParams: Promise<{ token?: string }> }) {

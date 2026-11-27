@@ -11,6 +11,8 @@ import { acceptTerms } from "@/lib/server/actions/account";
 import { ResendVerification } from "./account/ResendVerification";
 import { LEGAL } from "@/lib/legal";
 
+export const metadata = { robots: { index: false } };
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const s = await requireAdmin("MANAGER", { allowLocked: true });
   const org = await db.organization.findUnique({ where: { id: s.orgId }, select: { name: true, plan: true, billingStatus: true, trialEndsAt: true, termsVersion: true } });

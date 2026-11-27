@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AuthCard } from "@/components/AuthCard";
 import { LoginForm } from "./LoginForm";
 
-export const metadata = { title: "Sign in" };
+export const metadata = { title: "Sign in", robots: { index: false } };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; reset?: string }> }) {
   const { next, reset } = await searchParams;
