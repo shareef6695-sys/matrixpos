@@ -3,7 +3,7 @@ import { useActionState } from "react";
 import { PricingCards } from "@/components/Pricing";
 import { requestPlan, payByCard, openCardPortal } from "@/lib/server/actions/billing";
 
-export function PlanPicker({ current, paying, card, subscribed }: { current: string; paying: boolean; card: boolean; subscribed: boolean }) {
+export function PlanPicker({ current, paying, card, subscribed, vat }: { current: string; paying: boolean; card: boolean; subscribed: boolean; vat: boolean }) {
   const [state, action, pending] = useActionState(requestPlan, undefined);
   const [cardState, cardAction, cardPending] = useActionState(payByCard, undefined);
   const msg = cardState ?? state;
@@ -14,6 +14,7 @@ export function PlanPicker({ current, paying, card, subscribed }: { current: str
       {msg?.error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">{msg.error}</div>}
       <PricingCards
         current={current}
+        vat={vat}
         action={(p, yearly) => {
           const fields = (
             <>

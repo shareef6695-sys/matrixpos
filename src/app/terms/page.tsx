@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LegalPage, Contact } from "@/components/LegalPage";
 import { LEGAL } from "@/lib/legal";
 import { TRIAL_DAYS } from "@/lib/plans";
+import { seller } from "@/lib/legal";
 
 export const metadata = { title: "Terms of service" };
 
@@ -16,7 +17,7 @@ export default function Terms() {
       <h2>2. Trial, plans and payment</h2>
       <ul>
         <li>New accounts get a free trial of {TRIAL_DAYS} days. No card is needed.</li>
-        <li>After the trial, you pay for the plan you choose, monthly or yearly, as shown on our <Link href="/#pricing" className="text-brand-700">pricing</Link>. Prices exclude VAT.</li>
+        <li>After the trial, you pay for the plan you choose, monthly or yearly, as shown on our <Link href="/#pricing" className="text-brand-700">pricing</Link>.{seller().chargeVat ? " Prices exclude VAT." : " We are not registered for VAT, so no VAT is added."}</li>
         <li>We invoice you and payment is due within 14 days. If an invoice is unpaid, we may suspend your account after giving you notice. Your data stays safe while suspended.</li>
         <li>We&apos;ll give you at least 30 days&apos; notice of any price change.</li>
       </ul>
@@ -56,7 +57,7 @@ export default function Terms() {
       <p>These terms are governed by the law of England and Wales, and the courts of England and Wales have jurisdiction.</p>
 
       <h2>Contact</h2>
-      <p>{LEGAL.company}. Email <Contact />.</p>
+      <p>{LEGAL.company}, registered in England and Wales, company number {LEGAL.companyNumber}. Registered office: {LEGAL.address}. Email <Contact />.</p>
     </LegalPage>
   );
 }

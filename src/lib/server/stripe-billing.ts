@@ -101,3 +101,17 @@ export async function syncSubscription(sub: Stripe.Subscription, orgIdHint?: str
   if (plan && plan !== org.plan) await applyPlanToSettings(org.id, plan);
   return org.id;
 }
+
+/** When VAT isn't charged, removes any VAT rate left on an older card subscription so renewals don't add it. */
+export async function removeVatFromSubscription(subscriptionId: string) {
+  const s = stripe();
+  const sub = await s.subscriptions.retrieve(subscriptionId);
+  if (sub.status === "canceled") return;
+  const items = sub.items.data.filter((i) => (i.tax_rates?.length ?? 0) > 0);
+  if (!items.length && !(sub.default_tax_rates?.length ?? 0)) return;
+  await s.subscriptions.update(sub.id, {
+    default_tax_rates: "",
+    items: items.map((i) => ({ id: i.id, tax_rates: "" })),
+    proration_behavior: "none",
+  });
+}

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { PricingCards } from "@/components/Pricing";
 import { TRIAL_DAYS } from "@/lib/plans";
+import { seller } from "@/lib/legal";
 
 const faqs = [
   ["Do I need a card to start?", `No. Every plan is free for ${TRIAL_DAYS} days and we don't ask for card details. Pick a plan when you're happy.`],
@@ -62,8 +63,8 @@ export default function Home() {
             <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Simple pricing, less than the big names</h2>
             <p className="mt-3 text-slate-600">One flat price per business, not per till. No contracts, no setup fees and no share of your card takings.</p>
           </div>
-          <PricingCards />
-          <p className="mt-6 text-center text-xs text-slate-500">Prices exclude VAT. Yearly plans are paid up front.</p>
+          <PricingCards vat={seller().chargeVat} />
+          <p className="mt-6 text-center text-xs text-slate-500">{seller().chargeVat ? "Prices exclude VAT. " : "No VAT to add. "}Yearly plans are paid up front.</p>
         </div>
       </section>
       <section className="mx-auto max-w-3xl px-4 py-16">

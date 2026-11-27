@@ -1,4 +1,5 @@
 import "server-only";
+import { randomBytes } from "node:crypto";
 import type Stripe from "stripe";
 import { db } from "./db";
 import { appUrl, sendEmail } from "./email";
@@ -11,9 +12,18 @@ const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: 
 
 export const vatOn = (netPence: number) => (seller().chargeVat ? Math.round(netPence * 0.2) : 0);
 
-async function nextNumber() {
-  const c = await db.counter.upsert({ where: { key: "subscription-invoice" }, create: { key: "subscription-invoice", value: 1 }, update: { value: { increment: 1 } } });
-  return `MPI-${String(c.value).padStart(4, "0")}`;
+// Letters and digits that can't be mixed up when read out or typed (no 0/O, 1/I/L).
+const ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+
+/** Invoice numbers look like MPI-2026-K7Q3M: the year plus a random code, checked to be unique. */
+export async function nextNumber(now = new Date()) {
+  const year = now.toLocaleDateString("en-GB", { year: "numeric", timeZone: "Europe/London" });
+  for (;;) {
+    const bytes = randomBytes(5);
+    const code = Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join("");
+    const number = `MPI-${year}-${code}`;
+    if (!(await db.subscriptionInvoice.findUnique({ where: { number } }))) return number;
+  }
 }
 
 /** Who the invoice is addressed to: the business, its owner's email and its first shop's address. */

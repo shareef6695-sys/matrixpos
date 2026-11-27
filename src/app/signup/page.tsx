@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AuthCard } from "@/components/AuthCard";
 import { SignupForm } from "./SignupForm";
+import { seller } from "@/lib/legal";
 
 export const metadata = { title: "Create your shop" };
 
@@ -8,7 +9,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
   const { plan } = await searchParams;
   return (
     <AuthCard title="Create your shop" footer={<>Already have an account? <Link className="font-semibold text-brand-700" href="/login">Sign in</Link></>}>
-      <SignupForm plan={["STARTER", "BUSINESS", "ENTERPRISE"].includes(plan ?? "") ? plan : "BUSINESS"} />
+      <SignupForm plan={["STARTER", "BUSINESS", "ENTERPRISE"].includes(plan ?? "") ? plan : "BUSINESS"} vat={seller().chargeVat} />
     </AuthCard>
   );
 }

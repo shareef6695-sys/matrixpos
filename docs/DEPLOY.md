@@ -80,7 +80,9 @@ Every subscription payment has an invoice that the shop can see under **Plan & b
 - **Card:** when Stripe takes a payment, the invoice is saved and emailed automatically.
 - **Bank transfer:** in HQ, open the business and click **Send invoice**. When the money arrives, click **Mark paid** on the invoice (or **Mark paid for a month**), and a receipt is emailed.
 
-Set your details in Vercel: `INVOICE_ADDRESS`, `INVOICE_COMPANY_NUMBER`, `INVOICE_VAT_NUMBER`, `INVOICE_BANK_DETAILS` (lines separated by `|`) and `INVOICE_PAYMENT_DAYS`. If you are not VAT registered, set `CHARGE_VAT` to `false`.
+Invoice numbers look like `MPI-2026-K7Q3M` (year plus a unique code). The company name, registered office and company number are built in. Add your bank details in Vercel as `INVOICE_BANK_DETAILS`, lines separated by `|`. They are kept out of the code because the repository is public. Payment terms default to 14 days (`INVOICE_PAYMENT_DAYS`).
+
+VAT is off, because Matrix Infotech Ltd. is not VAT registered yet: no VAT is added to invoices, card payments or prices on the site. Once registered, set `CHARGE_VAT` to `true` and `INVOICE_VAT_NUMBER` to your VAT number.
 
 ## Daily clean-up
 

@@ -66,7 +66,7 @@ export default function Privacy() {
       <p>Connections are encrypted, passwords and PINs are hashed, each business&apos;s data is kept separate, sign-in attempts are limited, and owners can switch on two-step sign-in. If a breach affects your data, we&apos;ll tell you without undue delay.</p>
 
       <h2>Contact</h2>
-      <p>{LEGAL.company}. Email <Contact />.</p>
+      <p>{LEGAL.company}, registered in England and Wales, company number {LEGAL.companyNumber}. Registered office: {LEGAL.address}. Email <Contact />.</p>
     </LegalPage>
   );
 }

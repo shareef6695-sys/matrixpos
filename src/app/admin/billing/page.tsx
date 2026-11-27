@@ -7,6 +7,7 @@ import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { formatGBP } from "@/lib/pos/money";
 import { PlanPicker } from "./PlanPicker";
 import { stripeBillingEnabled, stripeMode } from "@/lib/server/stripe-billing";
+import { seller } from "@/lib/legal";
 import { CloseAccount } from "./CloseAccount";
 import { cancelClosure } from "@/lib/server/actions/account";
 import { CLOSURE_DAYS } from "@/lib/server/account";
@@ -98,13 +99,13 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
           </div>
         </div>
       )}
-      {s.role === "OWNER" ? <PlanPicker current={org.plan} paying={org.billingStatus === "ACTIVE"} card={stripeBillingEnabled()} subscribed={!!org.stripeSubscriptionId} /> : <p className="text-sm text-slate-600">Ask the business owner to choose a plan.</p>}
+      {s.role === "OWNER" ? <PlanPicker current={org.plan} paying={org.billingStatus === "ACTIVE"} card={stripeBillingEnabled()} subscribed={!!org.stripeSubscriptionId} vat={seller().chargeVat} /> : <p className="text-sm text-slate-600">Ask the business owner to choose a plan.</p>}
       <div className="card mt-8 text-sm text-slate-600">
         <h2 className="mb-2 font-semibold text-slate-900">How payment works</h2>
         {stripeBillingEnabled() ? (
-          <p>Pay by debit or credit card and your plan renews automatically, with a VAT invoice emailed each time. Card payments are handled securely by Stripe. We never see your card number. You can also ask for an invoice and pay by bank transfer. Prices exclude VAT.</p>
+          <p>Pay by debit or credit card and your plan renews automatically, with an invoice emailed each time. Card payments are handled securely by Stripe. We never see your card number. You can also ask for an invoice and pay by bank transfer.{seller().chargeVat ? " Prices exclude VAT." : ""}</p>
         ) : (
-          <p>When you choose a plan, we send an invoice to your email. Pay by bank transfer and your account is marked as paid. Prices exclude VAT.</p>
+          <p>When you choose a plan, we send an invoice to your email. Pay by bank transfer and your account is marked as paid.{seller().chargeVat ? " Prices exclude VAT." : ""}</p>
         )}
         {contact && <p className="mt-2">Questions about billing? Email <a className="font-semibold text-brand-700" href={`mailto:${contact}`}>{contact}</a>.</p>}
       </div>

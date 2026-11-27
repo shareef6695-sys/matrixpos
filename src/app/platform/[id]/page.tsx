@@ -87,7 +87,7 @@ export default async function PlatformShop({ params, searchParams }: { params: P
             </p>
             <div className="mb-4 flex flex-wrap gap-2">
               {invAct("send", `Send invoice (${formatGBP(org.billingCycle === "YEARLY" ? plan.yearlyPence : plan.monthlyPence)}${seller().chargeVat ? " + VAT" : ""})`)}
-              {quick("paid", `Mark paid for ${org.billingCycle === "YEARLY" ? "a year" : "a month"} (${formatGBP(org.billingCycle === "YEARLY" ? plan.yearlyPence : plan.monthlyPence)} + VAT)`, "btn-primary")}
+              {quick("paid", `Mark paid for ${org.billingCycle === "YEARLY" ? "a year" : "a month"} (${formatGBP(org.billingCycle === "YEARLY" ? plan.yearlyPence : plan.monthlyPence)}${seller().chargeVat ? " + VAT" : ""})`, "btn-primary")}
               {quick("extend7", "Extend trial 7 days")}
               {quick("extend14", "Extend trial 14 days")}
               {status === "SUSPENDED" || status === "CANCELLED" ? quick("reactivate", "Reactivate") : quick("suspend", "Suspend", "btn-danger")}

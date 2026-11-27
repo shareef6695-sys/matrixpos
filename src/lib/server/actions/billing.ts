@@ -10,7 +10,7 @@ import { redirect } from "next/navigation";
 import { appUrl } from "@/lib/server/email";
 import { seller } from "@/lib/legal";
 import { createBankInvoice, emailInvoice, markInvoicePaid, saveStripeInvoice } from "@/lib/server/invoices";
-import { priceFor, stripe, stripeBillingEnabled, syncSubscription, vatRate } from "@/lib/server/stripe-billing";
+import { priceFor, removeVatFromSubscription, stripe, stripeBillingEnabled, syncSubscription, vatRate } from "@/lib/server/stripe-billing";
 
 const PLAN_IDS = PLANS.map((p) => p.id) as string[];
 
@@ -114,7 +114,11 @@ export async function payByCard(_: FormState, f: FormData): Promise<FormState> {
         org.stripeSubscriptionId = null;
         await db.organization.update({ where: { id: org.id }, data: { stripeSubscriptionId: null } });
       } else if (sub.status !== "canceled") {
-        await st.subscriptions.update(sub.id, { items: [{ id: sub.items.data[0].id, price }], proration_behavior: "create_prorations", cancel_at_period_end: false });
+        await st.subscriptions.update(sub.id, {
+          items: [{ id: sub.items.data[0].id, price, ...(seller().chargeVat ? {} : { tax_rates: "" as const }) }],
+          ...(seller().chargeVat ? {} : { default_tax_rates: "" as const }),
+          proration_behavior: "create_prorations", cancel_at_period_end: false,
+        });
         await syncSubscription(await st.subscriptions.retrieve(sub.id));
         await audit(s.orgId, s.userId, "billing.card.change", { plan, cycle });
         revalidatePath("/admin", "layout");
@@ -182,7 +186,11 @@ export async function platformInvoice(f: FormData) {
   else if (op === "paid") await markInvoicePaid(id);
   else if (op === "resend") await emailInvoice(id);
   else if (op === "void") await db.subscriptionInvoice.updateMany({ where: { id, status: "OPEN" }, data: { status: "VOID" } });
-  else if (op === "sync") await syncStripeInvoices(orgId);
+  else if (op === "sync") {
+    await syncStripeInvoices(orgId);
+    const org = await db.organization.findUnique({ where: { id: orgId } });
+    if (org?.stripeSubscriptionId && !seller().chargeVat) await removeVatFromSubscription(org.stripeSubscriptionId).catch((e) => console.error(e));
+  }
   else return;
   await audit(orgId, null, `platform.invoice.${op}`, { by: admin.name, invoiceId: id || undefined });
   revalidatePath(`/platform/${orgId}`);

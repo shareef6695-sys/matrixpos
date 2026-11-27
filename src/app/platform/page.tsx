@@ -66,7 +66,7 @@ export default async function PlatformHome({ searchParams }: { searchParams: Pro
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Monthly revenue" value={formatGBP(mrr)} sub={`${paying} paying · ${formatGBP(mrr * 12)} a year, ex VAT`} />
+        <Stat label="Monthly revenue" value={formatGBP(mrr)} sub={`${paying} paying · ${formatGBP(mrr * 12)} a year`} />
         <Stat label="Businesses" value={String(shops.length)} sub={`${shopsTotal} shops · ${new7} new this week, ${new30} this month`} />
         <Stat label="On trial" value={String(trials)} sub={`${ending} ending in the next 7 days`} />
         <Stat label="Trading this week" value={`${trading} of ${shops.length}`} sub={`${formatGBP(takings30)} taken through MatrixPOS in 30 days`} />

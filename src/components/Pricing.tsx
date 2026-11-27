@@ -6,7 +6,7 @@ import { PLANS, TRIAL_DAYS, type Plan } from "@/lib/plans";
 const pounds = (pence: number) => `£${(pence / 100).toFixed(pence % 100 ? 2 : 0)}`;
 
 /** Plan cards with a monthly / yearly switch. `action` renders the button under each plan. */
-export function PricingCards({ current, action }: { current?: string; action?: (p: Plan, yearly: boolean) => React.ReactNode }) {
+export function PricingCards({ current, action, vat = false }: { current?: string; action?: (p: Plan, yearly: boolean) => React.ReactNode; vat?: boolean }) {
   const [yearly, setYearly] = useState(false);
   return (
     <div>
@@ -25,7 +25,7 @@ export function PricingCards({ current, action }: { current?: string; action?: (
             <p className="text-sm text-slate-500">{p.tagline}</p>
             <div className="mt-4 flex items-baseline gap-1">
               <span className="text-4xl font-extrabold tracking-tight text-slate-900">{pounds(yearly ? Math.round(p.yearlyPence / 12) : p.monthlyPence)}</span>
-              <span className="text-sm text-slate-500">/month + VAT</span>
+              <span className="text-sm text-slate-500">/month{vat ? " + VAT" : ""}</span>
             </div>
             <p className="mt-1 h-5 text-xs text-slate-500">{yearly ? `${pounds(p.yearlyPence)} billed yearly` : "Billed monthly, cancel any time"}</p>
             <ul className="mt-5 flex-1 space-y-2 text-sm text-slate-700">

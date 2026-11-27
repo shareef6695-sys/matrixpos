@@ -16,7 +16,7 @@ export function InvoiceDocument({ inv }: { inv: SubscriptionInvoice }) {
           <div className="mt-3 font-semibold">{s.name}</div>
           {s.address.map((l) => <div key={l}>{l}</div>)}
           {s.email && <div>{s.email}</div>}
-          {s.companyNumber && <div>Company no. {s.companyNumber}</div>}
+          {s.companyNumber && <div>Registered in England and Wales, company no. {s.companyNumber}</div>}
           {s.vatNumber && <div>VAT no. {s.vatNumber}</div>}
         </div>
         <div className="text-right">
@@ -56,12 +56,12 @@ export function InvoiceDocument({ inv }: { inv: SubscriptionInvoice }) {
         </tbody>
         <tfoot className="tabular-nums">
           <tr><td className="pt-3 text-right">Subtotal</td><td className="pt-3 text-right">{formatGBP(inv.netPence)}</td></tr>
-          <tr><td className="text-right">{inv.vatPence ? "VAT at 20%" : "VAT"}</td><td className="text-right">{formatGBP(inv.vatPence)}</td></tr>
+          {inv.vatPence > 0 && <tr><td className="text-right">VAT at 20%</td><td className="text-right">{formatGBP(inv.vatPence)}</td></tr>}
           <tr className="text-base font-bold"><td className="pt-2 text-right">Total</td><td className="pt-2 text-right">{formatGBP(inv.totalPence)}</td></tr>
         </tfoot>
       </table>
 
-      {!inv.vatPence && !s.vatNumber && <p className="mt-6 text-xs text-slate-500">{s.name} is not registered for VAT. No VAT has been charged.</p>}
+      {!inv.vatPence && <p className="mt-6 text-xs text-slate-500">{s.name} is not registered for VAT, so no VAT has been charged.</p>}
       {inv.status === "OPEN" && inv.method === "BANK" && s.bank.length > 0 && (
         <div className="mt-8 rounded-lg bg-slate-50 p-4 print:border print:border-slate-300">
           <div className="font-semibold">How to pay</div>

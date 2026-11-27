@@ -4,7 +4,7 @@ import { signup } from "@/lib/server/actions/auth";
 import { PLANS, TRIAL_DAYS } from "@/lib/plans";
 import { formatGBP } from "@/lib/pos/money";
 
-export function SignupForm({ plan = "BUSINESS" }: { plan?: string }) {
+export function SignupForm({ plan = "BUSINESS", vat = false }: { plan?: string; vat?: boolean }) {
   const [state, action, pending] = useActionState(signup, undefined);
   const f = (name: string, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
     <div><label className="label" htmlFor={name}>{label}</label><input className="input" id={name} name={name} {...props} /></div>
@@ -26,7 +26,7 @@ export function SignupForm({ plan = "BUSINESS" }: { plan?: string }) {
       <div>
         <label className="label" htmlFor="plan">Plan</label>
         <select id="plan" name="plan" className="input" defaultValue={plan}>
-          {PLANS.map((p) => <option key={p.id} value={p.id}>{p.name}: {formatGBP(p.monthlyPence)}/month + VAT</option>)}
+          {PLANS.map((p) => <option key={p.id} value={p.id}>{p.name}: {formatGBP(p.monthlyPence)}/month{vat ? " + VAT" : ""}</option>)}
         </select>
         <p className="mt-1 text-xs text-slate-500">Free for {TRIAL_DAYS} days, no card needed. You can change plan at any time.</p>
       </div>
