@@ -1,4 +1,5 @@
 "use client";
+import { COMPANY } from "@/components/PoweredBy";
 import { formatGBP, formatWeight } from "@/lib/pos/money";
 import { VAT_LETTERS } from "@/lib/pos/vat";
 import type { Bootstrap, QueuedSale } from "./types";
@@ -61,6 +62,7 @@ export function Receipt({ sale, boot }: { sale: QueuedSale; boot: Bootstrap }) {
       <div>Receipt {sale.receiptNo}</div>
       {boot.org.receiptFooter && <div className="mt-2 text-center">{boot.org.receiptFooter}</div>}
       {boot.org.companyNo && <div className="mt-1 text-center text-[10px]">Company No. {boot.org.companyNo}</div>}
+      <div className="mt-2 text-center text-[9px]">Powered by {COMPANY}</div>
     </div>
   );
 }

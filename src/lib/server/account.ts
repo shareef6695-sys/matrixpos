@@ -2,6 +2,15 @@ import "server-only";
 import { db } from "./db";
 import { createToken } from "./tokens";
 import { appUrl, sendEmail } from "./email";
+import { stripe, stripeBillingEnabled } from "./stripe-billing";
+
+/** Stops any card subscription straight away (used when an account is closed). */
+export async function cancelCardSubscription(orgId: string) {
+  const org = await db.organization.findUnique({ where: { id: orgId }, select: { stripeSubscriptionId: true } });
+  if (!org?.stripeSubscriptionId || !stripeBillingEnabled()) return;
+  await stripe().subscriptions.cancel(org.stripeSubscriptionId).catch((e) => console.error("Stripe cancel failed", e));
+  await db.organization.update({ where: { id: orgId }, data: { stripeSubscriptionId: null } }).catch(() => {});
+}
 
 export const CLOSURE_DAYS = 30;
 
@@ -29,6 +38,7 @@ export async function sendPasswordResetEmail(user: { id: string; name: string; e
 
 /** Permanently deletes a business and everything in it. */
 export async function deleteOrganization(orgId: string) {
+  await cancelCardSubscription(orgId);
   await db.$transaction(async (tx) => {
     await tx.journalEntry.deleteMany({ where: { organizationId: orgId } });
     await tx.sale.deleteMany({ where: { organizationId: orgId } });

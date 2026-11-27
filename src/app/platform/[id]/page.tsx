@@ -72,6 +72,10 @@ export default async function PlatformShop({ params, searchParams }: { params: P
         <div className="space-y-6 lg:col-span-2">
           <div className="card">
             <h2 className="mb-3 font-semibold">Subscription</h2>
+            <p className="mb-3 text-sm text-slate-600">
+              {org.stripeSubscriptionId ? "Pays by card through Stripe. The plan and paid-until date update automatically." : "Pays by invoice. Mark payments here when they arrive."}
+              {org.stripeCustomerId && <> <a href={`https://dashboard.stripe.com/customers/${org.stripeCustomerId}`} target="_blank" rel="noreferrer" className="font-semibold text-brand-700">Open in Stripe</a></>}
+            </p>
             <div className="mb-4 flex flex-wrap gap-2">
               {quick("paid", `Mark paid for ${org.billingCycle === "YEARLY" ? "a year" : "a month"} (${formatGBP(org.billingCycle === "YEARLY" ? plan.yearlyPence : plan.monthlyPence)} + VAT)`, "btn-primary")}
               {quick("extend7", "Extend trial 7 days")}

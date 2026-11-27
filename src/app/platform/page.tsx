@@ -138,7 +138,7 @@ export default async function PlatformHome({ searchParams }: { searchParams: Pro
                     {r.town && <div className="text-xs text-slate-500">{r.town}</div>}
                   </td>
                   <td><div>{r.owner?.name}</div><div className="text-xs text-slate-500">{r.owner?.email}</div></td>
-                  <td>{planById(r.plan).name}<div className="text-xs text-slate-500">{r.cycle.toLowerCase()}</div></td>
+                  <td>{planById(r.plan).name}<div className="text-xs text-slate-500">{r.cycle.toLowerCase()} · {r.card ? "card" : "invoice"}</div></td>
                   <td>
                     <StatusBadge status={r.status} />
                     {r.status === "TRIAL" && r.trialEndsAt && <div className="text-xs text-slate-500">ends {fmtDate(r.trialEndsAt)}</div>}

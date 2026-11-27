@@ -43,6 +43,8 @@ export async function platformShops() {
       trialEndsAt: o.trialEndsAt,
       paidUntil: o.paidUntil,
       note: o.billingNote,
+      card: !!o.stripeSubscriptionId,
+      stripeCustomerId: o.stripeCustomerId,
       owner: o.users[0] ?? null,
       stores: o._count.stores,
       registers: o.stores.reduce((n, s) => n + s._count.registers, 0),

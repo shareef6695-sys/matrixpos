@@ -96,6 +96,9 @@ model Organization {
   trialEndsAt   DateTime?
   paidUntil     DateTime?
   billingNote   String?
+  // Card payments through Stripe Billing (optional; invoicing still works without it).
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
 
   // Legal: when the owner accepted the terms, privacy policy and data processing agreement.
   termsAcceptedAt    DateTime?

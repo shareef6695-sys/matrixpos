@@ -6,7 +6,7 @@ import { db } from "@/lib/server/db";
 import { compare, hash, getAdmin, requireAdmin } from "@/lib/server/auth";
 import { audit } from "@/lib/server/till";
 import { consumeToken } from "@/lib/server/tokens";
-import { CLOSURE_DAYS, deleteOrganization, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/server/account";
+import { CLOSURE_DAYS, cancelCardSubscription, deleteOrganization, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/server/account";
 import { sendEmail } from "@/lib/server/email";
 import { clientIp, isLimited, recordAttempt } from "@/lib/server/ratelimit";
 import { newSecret, verifyTotp } from "@/lib/server/totp";
@@ -128,6 +128,7 @@ export async function requestClosure(_: FormState, f: FormData): Promise<FormSta
   if (isDemo(user.email)) return { error: DEMO };
   if (String(f.get("confirmName") ?? "").trim().toLowerCase() !== org.name.trim().toLowerCase()) return { error: "Type your business name exactly to confirm" };
   if (!user.passwordHash || !(await compare(String(f.get("password") ?? ""), user.passwordHash))) return { error: "Password isn't right" };
+  await cancelCardSubscription(org.id);
   await db.organization.update({ where: { id: org.id }, data: { closureRequestedAt: new Date(), billingStatus: "CANCELLED" } });
   await audit(org.id, user.id, "account.close.request");
   const when = new Date(Date.now() + CLOSURE_DAYS * 86_400_000).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });

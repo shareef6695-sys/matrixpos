@@ -59,6 +59,20 @@ MatrixPOS sends emails to confirm new accounts and reset passwords. Set up one o
 
 Also set `EMAIL_FROM`, for example `MatrixPOS <no-reply@matrixinfo.co.uk>`, using an address your provider lets you send from. Without email settings, nobody can confirm their email or reset a password.
 
+## Card payments for subscriptions (Stripe)
+
+Shops can pay for their plan by card, renewing automatically, as well as by invoice.
+
+1. In your Stripe account (stripe.com, as Matrix Infotech Ltd.), copy the **secret key** (Developers → API keys) into Vercel as `STRIPE_BILLING_SECRET_KEY`. Use `sk_test_…` first to try it, then `sk_live_…`.
+2. In Stripe, go to **Developers → Webhooks → Add endpoint**:
+   - URL: `https://pos.matrixinfo.co.uk/api/stripe/webhook`
+   - Events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`
+   - Copy the **signing secret** (`whsec_…`) into Vercel as `STRIPE_WEBHOOK_SECRET`.
+3. In Stripe, open **Settings → Billing → Customer portal** and click **Save** once, so shops can update their card and download invoices.
+4. Redeploy.
+
+Products and prices are created in Stripe automatically from `src/lib/plans.ts`, with 20% UK VAT added on top. When a shop pays, its plan, status and paid-until date update by themselves. If a card payment fails, the shop is marked overdue. If the subscription ends, the shop is locked.
+
 ## Daily clean-up
 
 `vercel.json` runs `/api/cron/daily` every night. It permanently deletes businesses whose owners closed their account more than 30 days ago, and clears old sign-in records. Set `CRON_SECRET` in Vercel to a long random string (Vercel sends it with each run). Without it, the job refuses to run.
