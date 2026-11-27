@@ -5,10 +5,11 @@ import { Stat } from "@/components/admin";
 import { formatGBP } from "@/lib/pos/money";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { displayStatus, planById } from "@/lib/plans";
-import { platformQuick } from "@/lib/server/actions/billing";
+import { platformQuick, platformInvoice } from "@/lib/server/actions/billing";
 import { platformDeleteNow, platformResetMfa } from "@/lib/server/actions/account";
 import { CLOSURE_DAYS } from "@/lib/server/account";
 import { StatusBadge } from "../StatusBadge";
+import { seller } from "@/lib/legal";
 import { BillingForm } from "./BillingForm";
 
 export const dynamic = "force-dynamic";
@@ -34,11 +35,19 @@ export default async function PlatformShop({ params, searchParams }: { params: P
     db.sale.findFirst({ where: { organizationId: id }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
     db.auditLog.findMany({ where: { organizationId: id, action: { startsWith: "platform." } }, orderBy: { createdAt: "desc" }, take: 5 }),
   ]);
+  const invoices = await db.subscriptionInvoice.findMany({ where: { organizationId: id }, orderBy: { issuedAt: "desc" }, take: 30 });
   const requests = await db.auditLog.findMany({ where: { organizationId: id, action: "billing.request" }, orderBy: { createdAt: "desc" }, take: 5, include: { user: { select: { email: true } } } });
   const status = displayStatus(org);
   const plan = planById(org.plan);
   const quick = (op: string, label: string, cls = "btn-secondary") => (
     <form action={platformQuick}><input type="hidden" name="id" value={org.id} /><input type="hidden" name="op" value={op} /><button className={cls}>{label}</button></form>
+  );
+
+  const invAct = (op: string, label: string, invoiceId = "", cls = "btn-secondary") => (
+    <form action={platformInvoice}>
+      <input type="hidden" name="orgId" value={org.id} /><input type="hidden" name="op" value={op} /><input type="hidden" name="invoiceId" value={invoiceId} />
+      <button className={cls}>{label}</button>
+    </form>
   );
 
   return (
@@ -77,12 +86,43 @@ export default async function PlatformShop({ params, searchParams }: { params: P
               {org.stripeCustomerId && <> <a href={`https://dashboard.stripe.com/customers/${org.stripeCustomerId}`} target="_blank" rel="noreferrer" className="font-semibold text-brand-700">Open in Stripe</a></>}
             </p>
             <div className="mb-4 flex flex-wrap gap-2">
+              {invAct("send", `Send invoice (${formatGBP(org.billingCycle === "YEARLY" ? plan.yearlyPence : plan.monthlyPence)}${seller().chargeVat ? " + VAT" : ""})`)}
               {quick("paid", `Mark paid for ${org.billingCycle === "YEARLY" ? "a year" : "a month"} (${formatGBP(org.billingCycle === "YEARLY" ? plan.yearlyPence : plan.monthlyPence)} + VAT)`, "btn-primary")}
               {quick("extend7", "Extend trial 7 days")}
               {quick("extend14", "Extend trial 14 days")}
               {status === "SUSPENDED" || status === "CANCELLED" ? quick("reactivate", "Reactivate") : quick("suspend", "Suspend", "btn-danger")}
             </div>
             <BillingForm org={{ id: org.id, plan: org.plan, billingStatus: org.billingStatus, billingCycle: org.billingCycle, trialEndsAt: org.trialEndsAt?.toISOString() ?? null, paidUntil: org.paidUntil?.toISOString() ?? null, billingNote: org.billingNote }} />
+          </div>
+          <div className="card p-0">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-4">
+              <h2 className="font-semibold">Invoices</h2>
+              {org.stripeCustomerId && invAct("sync", "Fetch card invoices from Stripe", "", "text-xs font-semibold text-brand-700 hover:underline")}
+            </div>
+            {invoices.length === 0 ? <p className="px-5 pb-4 pt-2 text-sm text-slate-500">No invoices yet.</p> : (
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead><tr><th>Number</th><th>Date</th><th>Status</th><th className="text-right">Total</th><th /></tr></thead>
+                  <tbody>
+                    {invoices.map((i) => (
+                      <tr key={i.id}>
+                        <td><a href={`/invoice/${i.id}`} className="font-mono text-brand-700 hover:underline">{i.number}</a><div className="text-xs text-slate-500">{i.method === "CARD" ? "card" : "bank transfer"}{i.emailedAt ? " · emailed" : ""}</div></td>
+                        <td className="whitespace-nowrap">{fmtDate(i.issuedAt)}</td>
+                        <td>{i.status === "PAID" ? `Paid ${i.paidAt ? fmtDate(i.paidAt) : ""}` : i.status === "VOID" ? "Cancelled" : `Due ${i.dueAt ? fmtDate(i.dueAt) : ""}`}</td>
+                        <td className="text-right tabular-nums">{formatGBP(i.totalPence)}</td>
+                        <td>
+                          <div className="flex flex-wrap justify-end gap-2 text-xs">
+                            {i.status === "OPEN" && i.method === "BANK" && invAct("paid", "Mark paid", i.id, "font-semibold text-emerald-700 hover:underline")}
+                            {invAct("resend", "Email again", i.id, "font-semibold text-slate-600 hover:underline")}
+                            {i.status === "OPEN" && i.method === "BANK" && invAct("void", "Cancel", i.id, "font-semibold text-red-700 hover:underline")}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
           <div className="card">
             <h2 className="mb-3 font-semibold">Shops and tills</h2>

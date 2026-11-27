@@ -4,6 +4,7 @@ import { PageHeader, Stat } from "@/components/admin";
 import { accessFor, planById, STATUS_LABEL } from "@/lib/plans";
 import { platformEmails } from "@/lib/server/billing";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
+import { formatGBP } from "@/lib/pos/money";
 import { PlanPicker } from "./PlanPicker";
 import { stripeBillingEnabled, stripeMode } from "@/lib/server/stripe-billing";
 import { CloseAccount } from "./CloseAccount";
@@ -17,12 +18,13 @@ const limit = (n: number, max: number | null) => (max == null ? `${n} (unlimited
 export default async function Billing({ searchParams }: { searchParams: Promise<{ card?: string }> }) {
   const { card } = await searchParams;
   const s = await requireAdmin("MANAGER", { allowLocked: true });
-  const [org, stores, registers, staff, lastRequest] = await Promise.all([
+  const [org, stores, registers, staff, lastRequest, invoices] = await Promise.all([
     db.organization.findUniqueOrThrow({ where: { id: s.orgId } }),
     db.store.count({ where: { organizationId: s.orgId } }),
     db.register.count({ where: { store: { organizationId: s.orgId } } }),
     db.user.count({ where: { organizationId: s.orgId, active: true } }),
     db.auditLog.findFirst({ where: { organizationId: s.orgId, action: "billing.request" }, orderBy: { createdAt: "desc" } }),
+    db.subscriptionInvoice.findMany({ where: { organizationId: s.orgId }, orderBy: { issuedAt: "desc" }, take: 50 }),
   ]);
   const plan = planById(org.plan);
   const access = accessFor(org);
@@ -69,6 +71,32 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
         <p className="mb-6 text-sm text-slate-600">
           You asked for {planById(req.plan).name} ({String(req.cycle ?? "").toLowerCase()}) on {fmtDateTime(lastRequest!.createdAt)}. We'll be in touch with an invoice.
         </p>
+      )}
+      {invoices.length > 0 && (
+        <div className="card mb-8 p-0">
+          <h2 className="px-5 pt-4 font-semibold">Invoices</h2>
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead><tr><th>Number</th><th>Date</th><th>Description</th><th>Status</th><th className="text-right">Total</th><th /></tr></thead>
+              <tbody>
+                {invoices.map((i) => (
+                  <tr key={i.id}>
+                    <td className="font-mono">{i.number}</td>
+                    <td className="whitespace-nowrap">{fmtDate(i.issuedAt)}</td>
+                    <td>{i.description}</td>
+                    <td>
+                      <span className={`badge ${i.status === "PAID" ? "bg-emerald-100 text-emerald-800" : i.status === "VOID" ? "bg-slate-200 text-slate-700" : "bg-amber-100 text-amber-800"}`}>
+                        {i.status === "PAID" ? `Paid${i.method === "CARD" ? " by card" : ""}` : i.status === "VOID" ? "Cancelled" : `Due ${i.dueAt ? fmtDate(i.dueAt) : ""}`}
+                      </span>
+                    </td>
+                    <td className="text-right tabular-nums">{formatGBP(i.totalPence)}</td>
+                    <td className="text-right"><a href={`/invoice/${i.id}`} className="font-semibold text-brand-700 hover:underline">View / PDF</a></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
       {s.role === "OWNER" ? <PlanPicker current={org.plan} paying={org.billingStatus === "ACTIVE"} card={stripeBillingEnabled()} subscribed={!!org.stripeSubscriptionId} /> : <p className="text-sm text-slate-600">Ask the business owner to choose a plan.</p>}
       <div className="card mt-8 text-sm text-slate-600">

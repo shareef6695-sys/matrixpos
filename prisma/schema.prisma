@@ -120,6 +120,7 @@ model Organization {
   ledgerAccounts LedgerAccount[]
   journals    JournalEntry[]
   bills       Bill[]
+  subscriptionInvoices SubscriptionInvoice[]
 }
 
 model OrgSettings {
@@ -664,4 +665,40 @@ model LoginAttempt {
   createdAt DateTime @default(now())
 
   @@index([key, createdAt])
+}
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  VOID
+}
+
+/** MatrixPOS's invoices to a business for its subscription (card via Stripe, or bank transfer). */
+model SubscriptionInvoice {
+  id              String        @id @default(cuid())
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId  String
+  number          String        @unique // MPI-0001, or Stripe's own number for card invoices
+  status          InvoiceStatus @default(OPEN)
+  method          String        @default("BANK") // BANK or CARD
+  description     String
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  netPence        Int
+  vatPence        Int
+  totalPence      Int
+  issuedAt        DateTime      @default(now())
+  dueAt           DateTime?
+  paidAt          DateTime?
+  // Snapshot of who it was billed to
+  billToName      String
+  billToEmail     String?
+  billToAddress   String?
+  billToVatNumber String?
+  stripeInvoiceId String?       @unique
+  stripePdfUrl    String?
+  emailedAt       DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([organizationId, issuedAt])
 }

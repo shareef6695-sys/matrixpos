@@ -73,6 +73,15 @@ Shops can pay for their plan by card, renewing automatically, as well as by invo
 
 Products and prices are created in Stripe automatically from `src/lib/plans.ts`, with 20% UK VAT added on top. When a shop pays, its plan, status and paid-until date update by themselves. If a card payment fails, the shop is marked overdue. If the subscription ends, the shop is locked.
 
+## Invoices to shops
+
+Every subscription payment has an invoice that the shop can see under **Plan & billing**, open, print or save as a PDF, and receives by email.
+
+- **Card:** when Stripe takes a payment, the invoice is saved and emailed automatically.
+- **Bank transfer:** in HQ, open the business and click **Send invoice**. When the money arrives, click **Mark paid** on the invoice (or **Mark paid for a month**), and a receipt is emailed.
+
+Set your details in Vercel: `INVOICE_ADDRESS`, `INVOICE_COMPANY_NUMBER`, `INVOICE_VAT_NUMBER`, `INVOICE_BANK_DETAILS` (lines separated by `|`) and `INVOICE_PAYMENT_DAYS`. If you are not VAT registered, set `CHARGE_VAT` to `false`.
+
 ## Daily clean-up
 
 `vercel.json` runs `/api/cron/daily` every night. It permanently deletes businesses whose owners closed their account more than 30 days ago, and clears old sign-in records. Set `CRON_SECRET` in Vercel to a long random string (Vercel sends it with each run). Without it, the job refuses to run.

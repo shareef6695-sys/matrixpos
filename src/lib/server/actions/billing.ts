@@ -8,6 +8,8 @@ import { PLANS, planById } from "@/lib/plans";
 import type { FormState } from "./auth";
 import { redirect } from "next/navigation";
 import { appUrl } from "@/lib/server/email";
+import { seller } from "@/lib/legal";
+import { createBankInvoice, emailInvoice, markInvoicePaid, saveStripeInvoice } from "@/lib/server/invoices";
 import { priceFor, stripe, stripeBillingEnabled, syncSubscription, vatRate } from "@/lib/server/stripe-billing";
 
 const PLAN_IDS = PLANS.map((p) => p.id) as string[];
@@ -71,10 +73,10 @@ export async function platformQuick(f: FormData) {
     const base = Math.max(now, org.trialEndsAt?.getTime() ?? now);
     await db.organization.update({ where: { id }, data: { billingStatus: "TRIAL", trialEndsAt: new Date(base + (op === "extend7" ? 7 : 14) * day) } });
   } else if (op === "paid") {
-    const months = org.billingCycle === "YEARLY" ? 12 : 1;
-    const base = new Date(Math.max(now, org.paidUntil?.getTime() ?? now));
-    base.setUTCMonth(base.getUTCMonth() + months);
-    await db.organization.update({ where: { id }, data: { billingStatus: "ACTIVE", paidUntil: base } });
+    // Records the payment as a paid invoice, extends paid-until and emails the receipt.
+    const open = await db.subscriptionInvoice.findFirst({ where: { organizationId: id, status: "OPEN", method: "BANK" }, orderBy: { issuedAt: "asc" } });
+    if (open) await markInvoicePaid(open.id);
+    else await createBankInvoice(id, { paid: true });
   } else if (op === "suspend") {
     await db.organization.update({ where: { id }, data: { billingStatus: "SUSPENDED" } });
   } else if (op === "reactivate") {
@@ -136,7 +138,7 @@ export async function payByCard(_: FormState, f: FormData): Promise<FormState> {
       mode: "subscription",
       customer,
       client_reference_id: org.id,
-      line_items: [{ price, quantity: 1, tax_rates: [await vatRate()] }],
+      line_items: [{ price, quantity: 1, ...(seller().chargeVat ? { tax_rates: [await vatRate()] } : {}) }],
       subscription_data: { metadata: { orgId: org.id } },
       metadata: { orgId: org.id, plan, cycle },
       billing_address_collection: "required",
@@ -167,4 +169,29 @@ export async function openCardPortal() {
     console.error("Stripe portal failed", e);
   }
   redirect(url);
+}
+
+// ---------------- Invoices (platform owner) ----------------
+
+export async function platformInvoice(f: FormData) {
+  const admin = await requirePlatformAdmin();
+  const op = String(f.get("op") ?? "");
+  const orgId = String(f.get("orgId") ?? "");
+  const id = String(f.get("invoiceId") ?? "");
+  if (op === "send") await createBankInvoice(orgId);
+  else if (op === "paid") await markInvoicePaid(id);
+  else if (op === "resend") await emailInvoice(id);
+  else if (op === "void") await db.subscriptionInvoice.updateMany({ where: { id, status: "OPEN" }, data: { status: "VOID" } });
+  else if (op === "sync") await syncStripeInvoices(orgId);
+  else return;
+  await audit(orgId, null, `platform.invoice.${op}`, { by: admin.name, invoiceId: id || undefined });
+  revalidatePath(`/platform/${orgId}`);
+}
+
+/** Pulls a business's card invoices from Stripe (for payments made before invoices were stored). */
+async function syncStripeInvoices(orgId: string) {
+  const org = await db.organization.findUnique({ where: { id: orgId } });
+  if (!org?.stripeCustomerId || !stripeBillingEnabled()) return;
+  const list = await stripe().invoices.list({ customer: org.stripeCustomerId, limit: 50 }).catch(() => null);
+  for (const inv of list?.data ?? []) if (inv.status !== "draft") await saveStripeInvoice(inv, orgId);
 }

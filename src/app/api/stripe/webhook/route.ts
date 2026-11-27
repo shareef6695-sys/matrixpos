@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { stripe, syncSubscription } from "@/lib/server/stripe-billing";
 import { audit } from "@/lib/server/till";
+import { saveStripeInvoice } from "@/lib/server/invoices";
 
 /** Stripe tells us about subscription payments here. Add this URL as a webhook endpoint in Stripe. */
 export async function POST(req: Request) {
@@ -37,6 +38,7 @@ export async function POST(req: Request) {
       const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
       if (subId) {
         const id = await syncSubscription(await s.subscriptions.retrieve(subId));
+        if (id) await saveStripeInvoice(inv, id);
         if (id) await audit(id, null, event.type === "invoice.paid" ? "billing.card.paid" : "billing.card.failed", { invoice: inv.id, amount: inv.amount_paid || inv.amount_due });
       }
       break;
