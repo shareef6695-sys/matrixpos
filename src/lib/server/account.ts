@@ -3,12 +3,13 @@ import { db } from "./db";
 import { createToken } from "./tokens";
 import { appUrl, sendEmail } from "./email";
 import { stripe, stripeBillingEnabled } from "./stripe-billing";
+import { safeError } from "@/lib/server/redact";
 
 /** Stops any card subscription straight away (used when an account is closed). */
 export async function cancelCardSubscription(orgId: string) {
   const org = await db.organization.findUnique({ where: { id: orgId }, select: { stripeSubscriptionId: true } });
   if (!org?.stripeSubscriptionId || !stripeBillingEnabled()) return;
-  await stripe().subscriptions.cancel(org.stripeSubscriptionId).catch((e) => console.error("Stripe cancel failed", e));
+  await stripe().subscriptions.cancel(org.stripeSubscriptionId).catch((e) => console.error("Stripe cancel failed", safeError(e)));
   await db.organization.update({ where: { id: orgId }, data: { stripeSubscriptionId: null } }).catch(() => {});
 }
 

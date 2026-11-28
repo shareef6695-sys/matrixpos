@@ -1,6 +1,7 @@
 import { db } from "@/lib/server/db";
 import { tillContext, json, fail } from "@/lib/server/till";
 import { providers, providerEnabled, type ProviderId } from "@/lib/server/payments";
+import { safeErrorMessage } from "@/lib/server/redact";
 
 /** POST { action: "start", amountPence, saleId } | { action: "status", ref } | { action: "cancel", ref } */
 export async function POST(req: Request, { params }: { params: Promise<{ provider: string }> }) {
@@ -25,6 +26,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
     if (body.action === "cancel") { await p.cancel({ settings, register }, String(body.ref)); return json({ ok: true }); }
     return fail("Unknown action");
   } catch (e) {
-    return fail(e instanceof Error ? e.message : "Payment provider error", 502);
+    return fail(safeErrorMessage(e, "Payment provider error"), 502);
   }
 }

@@ -45,6 +45,22 @@ npm run typecheck
 
 See [docs/DEPLOY.md](docs/DEPLOY.md) for the UK VPS database setup and Vercel deployment.
 
+## Security and secrets
+
+> **Warning: this repository is public.** Anything ever committed, including in old commits, can be read by anyone.
+> If a real secret is ever committed by mistake, deleting it in a later commit is not enough: the old value is still in git history.
+> **Rotate it immediately** (create a new key in Stripe, Resend, your SMTP provider or the database, update it in Vercel, then revoke the old one).
+
+- All credentials are environment variables, set in Vercel (Project > Settings > Environment Variables) or a local `.env` file. `.env` and `.env.*` are git-ignored; only [.env.example](.env.example), with placeholders, is committed.
+- Every variable is server-side only. Nothing uses a `NEXT_PUBLIC_` prefix, which would copy the value into the browser. Keep it that way.
+- Shops' own card machine keys (Stripe Terminal, SumUp, Dojo) are stored in the database, used only on the server, and never sent to the browser or included in data exports.
+- Errors from Stripe, card providers and email are passed through `src/lib/server/redact.ts` before they are logged or returned, so keys, tokens and connection-string passwords are masked.
+- The database is only reached by Prisma on the server. On self-hosted Supabase, MatrixPOS tables live in the `matrixpos` schema (not exposed by the REST API), have row level security switched on, and Supabase's `anon` and `authenticated` roles have no access to them. Never put a Supabase `service_role` key anywhere in this app.
+- `npm test` includes a secret scan (`tests/secrets.test.ts`) that fails CI if anything shaped like a live key, token, private key or password-bearing database URL is committed.
+- The demo seed (`owner@demo.matrixpos.uk` / `demo1234`) refuses to run in production. If it was ever run against the live database, delete that account.
+
+A full scan of the git history on 28 November 2026 found no real secrets ever committed, so nothing needs rotating today.
+
 ## Hardware
 
 - **Barcode scanners:** any scanner in keyboard (HID) mode. The till keeps its scan box focused.
