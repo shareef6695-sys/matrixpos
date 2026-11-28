@@ -16,6 +16,8 @@ export async function cancelCardSubscription(orgId: string) {
 }
 
 export const CLOSURE_DAYS = 30;
+/** Password reset links are short-lived: 15 minutes, used once, and asking again cancels the previous link. */
+export const RESET_TOKEN_MINUTES = 15;
 
 export async function sendVerificationEmail(user: { id: string; name: string; email: string | null }) {
   if (!user.email) return false;
@@ -30,12 +32,12 @@ export async function sendVerificationEmail(user: { id: string; name: string; em
 
 export async function sendPasswordResetEmail(user: { id: string; name: string; email: string | null }) {
   if (!user.email) return false;
-  const token = await createToken(user.id, "RESET_PASSWORD", 60);
+  const token = await createToken(user.id, "RESET_PASSWORD", RESET_TOKEN_MINUTES);
   const link = `${await appUrl()}/reset-password?token=${token}`;
   return sendEmail({
     to: user.email,
     subject: "Reset your MatrixPOS password",
-    text: `Hi ${user.name},\n\nSomeone asked to reset the password for your MatrixPOS account. To choose a new password, open this link:\n\n${link}\n\nThe link works for 1 hour and can be used once. If it wasn't you, ignore this email and your password stays the same.`,
+    text: `Hi ${user.name},\n\nSomeone asked to reset the password for your MatrixPOS account. To choose a new password, open this link:\n\n${link}\n\nThe link works for ${RESET_TOKEN_MINUTES} minutes and can be used once. If it wasn't you, ignore this email and your password stays the same.`,
   });
 }
 
@@ -65,10 +67,13 @@ export async function dailyCleanup() {
   const day = new Date(Date.now() - 86_400_000);
   const attempts = await db.loginAttempt.deleteMany({ where: { createdAt: { lt: day } } });
   const tokens = await db.authToken.deleteMany({ where: { OR: [{ expiresAt: { lt: day } }, { usedAt: { lt: day } }] } });
+  const revoked = await db.revokedToken.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+  // Tills only sync sales made in the last 14 days, so older price lists are no longer needed.
+  const snapshots = await db.pricingSnapshot.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 30 * 86_400_000) } } });
   // Invoices of deleted businesses are kept for 6 years after the end of the financial year, so at most 7 years.
   const invoiceCutoff = new Date(Date.now() - INVOICE_RETENTION_YEARS * 365.25 * 86_400_000);
   const invoices = await db.subscriptionInvoice.deleteMany({ where: { organizationId: null, issuedAt: { lt: invoiceCutoff } } });
-  return { deletedBusinesses: due.length, loginAttempts: attempts.count, tokens: tokens.count, expiredInvoices: invoices.count };
+  return { deletedBusinesses: due.length, loginAttempts: attempts.count, tokens: tokens.count, revokedTokens: revoked.count, pricingSnapshots: snapshots.count, expiredInvoices: invoices.count };
 }
 
 export const INVOICE_RETENTION_YEARS = 7;

@@ -10,10 +10,11 @@ import { sendVerificationEmail } from "@/lib/server/account";
 import { clientIp, isLimited, overLimit, recordAttempt } from "@/lib/server/ratelimit";
 import { verifyTotp } from "@/lib/server/totp";
 import { openSecret } from "@/lib/server/secret-box";
+import { revoke, useOnce } from "@/lib/server/revocation";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { LEGAL } from "@/lib/legal";
 import {
-  ADMIN_COOKIE, ADMIN_MAX_AGE, DEVICE_COOKIE, TILL_COOKIE, MFA_COOKIE, MFA_MAX_AGE, sign, verify, type MfaSession,
+  ADMIN_COOKIE, ADMIN_MAX_AGE, DEVICE_COOKIE, TILL_COOKIE, MFA_COOKIE, MFA_MAX_AGE, sign, verify, type AdminToken, type MfaSession,
 } from "@/lib/session";
 
 export type FormState = { error?: string; ok?: string } | undefined;
@@ -65,7 +66,9 @@ export async function verifyLoginCode(_: FormState, form: FormData): Promise<For
   if (await isLimited(key, 5, 15)) return { error: TOO_MANY };
   const user = await db.user.findUnique({ where: { id: pending.userId } });
   if (!user?.active || !user.totpSecret) return { error: "Please sign in again." };
-  if (!verifyTotp(openSecret(user.totpSecret)!, String(form.get("code") ?? ""))) {
+  const step = verifyTotp(openSecret(user.totpSecret)!, String(form.get("code") ?? ""));
+  // Each code works once: a code seen over someone's shoulder, or replayed, is refused.
+  if (step === false || !(await useOnce(`totp:${user.id}:${step}`, new Date((step + 2) * 30_000)))) {
     await recordAttempt([key], false);
     return { error: "That code isn't right. Check your authenticator app and try again." };
   }
@@ -76,7 +79,11 @@ export async function verifyLoginCode(_: FormState, form: FormData): Promise<For
 }
 
 export async function logout() {
-  (await cookies()).delete(ADMIN_COOKIE);
+  const jar = await cookies();
+  // The cookie is deleted, and its session id is revoked so a copy of the cookie stops working too.
+  const s = await verify<AdminToken>(jar.get(ADMIN_COOKIE)?.value, "admin");
+  if (s) await revoke(s.jti, s.exp);
+  jar.delete(ADMIN_COOKIE);
   redirect("/login");
 }
 

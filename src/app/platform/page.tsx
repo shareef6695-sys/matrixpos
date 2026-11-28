@@ -7,6 +7,7 @@ import { planById } from "@/lib/plans";
 import { StatusBadge } from "./StatusBadge";
 import { stripeMode } from "@/lib/server/stripe-billing";
 import { setupChecks } from "@/lib/server/setup-check";
+import { requirePlatformAdmin } from "@/lib/server/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ const FILTERS: [string, string, (r: ShopRow, now: number) => boolean][] = [
 ];
 
 export default async function PlatformHome({ searchParams }: { searchParams: Promise<{ f?: string; q?: string }> }) {
+  // Checked here as well as in the layout: Next.js can render a page without re-running its layout.
+  await requirePlatformAdmin();
   const { f = "all", q = "" } = await searchParams;
   const [all, requests] = await Promise.all([platformShops(), planRequests()]);
   const shops = all.filter((r) => !r.internal);

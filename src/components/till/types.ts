@@ -24,6 +24,9 @@ export interface Bootstrap {
   products: TillProduct[];
   promotions: PromotionRule[];
   lastSeq: number;
+  /** Price list id and signed cashier proof, sent back with every sale so the server can check it. */
+  pricingId?: string;
+  cashierProof?: string | null;
   user: { id: string; name: string; role: "OWNER" | "MANAGER" | "SUPERVISOR" | "CASHIER" } | null;
   shift: { id: string; openedAt: string; openingFloatPence: number } | null;
 }
@@ -37,6 +40,7 @@ export interface QueuedSale {
   lines: { productId: string | null; name: string; quantity: number; unit: PricingUnit; unitPricePence: number; grossPence: number; discountPence: number; netPence: number; vatCode: VatCode; vatRate: number; promotionName: string | null }[];
   vat: { vatCode: VatCode; vatRate: number; grossPence: number; vatPence: number }[];
   payments: Tender[];
+  pricingId?: string | null; cashierProof?: string | null; approvals?: string[];
   // display-only, stripped before sync
   _cashier?: string; _promotions?: { name: string; savingPence: number }[]; _customer?: string | null;
 }

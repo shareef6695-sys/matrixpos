@@ -121,6 +121,7 @@ model Organization {
   journals    JournalEntry[]
   bills       Bill[]
   subscriptionInvoices SubscriptionInvoice[]
+  pricingSnapshots PricingSnapshot[]
 }
 
 model OrgSettings {
@@ -706,4 +707,30 @@ model SubscriptionInvoice {
   createdAt       DateTime      @default(now())
 
   @@index([organizationId, issuedAt])
+}
+
+/**
+ * Sessions and one-time codes that must not be accepted again before they expire: back office and till
+ * sessions after sign-out, and authenticator codes once used. Rows are purged daily once expired.
+ */
+model RevokedToken {
+  id        String   @id // "jti:<session id>" or "totp:<user id>:<time step>"
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+/**
+ * The prices, VAT codes and offers a till was given (in /api/till/bootstrap), so the server can re-price every
+ * sale itself with exactly what the till had, even if it was offline while prices changed. Kept for 30 days.
+ */
+model PricingSnapshot {
+  id             String       @id // sha256 of the business id and the data
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  data           Json
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
 }

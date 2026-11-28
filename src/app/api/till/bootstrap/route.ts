@@ -2,6 +2,8 @@ import { db } from "@/lib/server/db";
 import { getTillUser } from "@/lib/server/auth";
 import { deviceContext, json } from "@/lib/server/till";
 import { apiRoute } from "@/lib/server/errors";
+import { pricingData, savePricing } from "@/lib/server/pricing-snapshot";
+import { TILL_MAX_AGE, sign } from "@/lib/session";
 
 /** Everything a till needs to sell offline: business details, settings, catalogue, offers. */
 export const GET = apiRoute("GET /api/till/bootstrap", async () => {
@@ -22,7 +24,11 @@ export const GET = apiRoute("GET /api/till/bootstrap", async () => {
     db.sale.findFirst({ where: { registerId: register.id }, orderBy: { syncedAt: "desc" }, select: { receiptNo: true } }),
     getTillUser(),
   ]);
-  const user = tillUser ? await db.user.findUnique({ where: { id: tillUser.till.userId }, select: { id: true, name: true, role: true } }) : null;
+  const user = tillUser ? await db.user.findFirst({ where: { id: tillUser.till.userId, organizationId: orgId, active: true }, select: { id: true, name: true, role: true } }) : null;
+  // The price list this till sells from. The server re-prices each sale against it (see lib/pos/verify-sale.ts).
+  const pricingId = await savePricing(orgId, pricingData(products, promotions, settings));
+  // Sent back with each sale, so a sale synced later (even after sign-out) is tied to the cashier who made it.
+  const cashierProof = user ? await sign({ kind: "cashier", userId: user.id, orgId, registerId: register.id, role: user.role }, TILL_MAX_AGE) : null;
   const shift = user ? await db.shift.findFirst({ where: { registerId: register.id, closedAt: null }, orderBy: { openedAt: "desc" } }) : null;
   const lastSeq = lastSale ? parseInt(lastSale.receiptNo.split("-").pop() ?? "0", 10) || 0 : 0;
 
@@ -49,6 +55,8 @@ export const GET = apiRoute("GET /api/till/bootstrap", async () => {
       startsAt: p.startsAt, endsAt: p.endsAt, items: p.items.map((i) => ({ productId: i.productId, group: i.group })),
     })) : [],
     lastSeq,
+    pricingId,
+    cashierProof,
     user,
     shift: shift ? { id: shift.id, openedAt: shift.openedAt, openingFloatPence: shift.openingFloatPence } : null,
   });

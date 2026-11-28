@@ -13,8 +13,8 @@ describe("totp", () => {
   });
   it("verifies within one step of drift", () => {
     const now = 1111111109_000;
-    expect(verifyTotp(SECRET, "081804", now)).toBe(true);
-    expect(verifyTotp(SECRET, "081804", now + 30_000)).toBe(true);
+    expect(verifyTotp(SECRET, "081804", now)).toBe(Math.floor(now / 30_000));
+    expect(verifyTotp(SECRET, "081804", now + 30_000)).toBe(Math.floor(now / 30_000));
     expect(verifyTotp(SECRET, "081804", now + 90_000)).toBe(false);
     expect(verifyTotp(SECRET, "abc", now)).toBe(false);
   });

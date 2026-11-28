@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/server/db";
+import { requirePlatformAdmin } from "@/lib/server/billing";
 import { Stat } from "@/components/admin";
 import { formatGBP } from "@/lib/pos/money";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
@@ -17,6 +18,8 @@ export const dynamic = "force-dynamic";
 const DAY = 86_400_000;
 
 export default async function PlatformShop({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ confirm?: string }> }) {
+  // Checked here as well as in the layout: Next.js can render a page without re-running its layout.
+  await requirePlatformAdmin();
   const { id } = await params;
   const { confirm } = await searchParams;
   const org = await db.organization.findUnique({

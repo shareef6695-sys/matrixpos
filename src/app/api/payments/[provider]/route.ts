@@ -6,8 +6,9 @@ import { apiRoute, publicMessage } from "@/lib/server/errors";
 
 /** POST { action: "start", amountPence, saleId } | { action: "status", ref } | { action: "cancel", ref } */
 export const POST = apiRoute("POST /api/payments/[provider]", async (req: Request, { params }: { params: Promise<{ provider: string }> }) => {
-  const ctx = await tillContext();
-  if (!ctx) return fail("Sign in at the till first", 401);
+  // Card payments need an active subscription, even on a till that signed in before the account was locked.
+  const ctx = await tillContext({ requireActive: true });
+  if (!ctx) return fail("Sign in at the till first. If you are signed in, check the shop's subscription under Billing.", 401);
   const id = (await params).provider.toUpperCase() as ProviderId;
   if (!(id in providers)) return fail("Unknown payment provider", 404);
   const [stored, register] = await Promise.all([
