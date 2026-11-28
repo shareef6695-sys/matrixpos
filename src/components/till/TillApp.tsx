@@ -23,7 +23,7 @@ type Overlay =
   | { kind: "age"; age: number }
   | { kind: "pay" }
   | { kind: "receipt"; sale: QueuedSale }
-  | { kind: "override"; title: string; action: string; then: (approverName: string) => void }
+  | { kind: "override"; title: string; action: string; then: (approverName: string, token?: string | null) => void }
   | { kind: "price"; lineId: string }
   | { kind: "qty"; lineId: string }
   | { kind: "refund" }
@@ -215,6 +215,8 @@ function Selling({ boot, online, pending, setPending, notify, reload }: {
   const [customer, setCustomer] = useState<{ id: string; name: string; points: number } | null>(null);
   const [refundOf, setRefundOf] = useState<{ id: string; receiptNo: string } | null>(null);
   const [saleId, setSaleId] = useState(uuid);
+  // Signed supervisor approvals for this sale; the server needs them to accept a discount or refund.
+  const [approvals, setApprovals] = useState<string[]>([]);
   const [stock, setStock] = useState<Record<string, number | null>>(() => Object.fromEntries(boot.products.map((p) => [p.id, p.stock])));
   const scanRef = useRef<HTMLInputElement>(null);
   const s = boot.settings;
@@ -316,12 +318,12 @@ function Selling({ boot, online, pending, setPending, notify, reload }: {
   }
 
   function withOverride(title: string, action: string, setting: boolean, fn: (approver: string) => void) {
-    if (needsOverride(setting)) setOverlay({ kind: "override", title, action, then: fn });
+    if (needsOverride(setting)) setOverlay({ kind: "override", title, action, then: (name, token) => { if (token) setApprovals((a) => [...a, token]); fn(name); } });
     else fn(user.name);
   }
 
   function clearSale() {
-    setLines([]); setSelected(null); setAgeVerified(false); setCustomer(null); setRefundOf(null); setSaleId(uuid()); setScan("");
+    setLines([]); setSelected(null); setAgeVerified(false); setCustomer(null); setRefundOf(null); setSaleId(uuid()); setApprovals([]); setScan("");
   }
 
   function startPayment() {
@@ -347,6 +349,7 @@ function Selling({ boot, online, pending, setPending, notify, reload }: {
       })),
       vat: basket.vat.map((v) => ({ vatCode: v.vatCode, vatRate: v.vatRate, grossPence: sign * v.grossPence, vatPence: sign * v.vatPence })),
       payments: tenders.map((t) => ({ ...t, amountPence: sign * t.amountPence })),
+      pricingId: boot.pricingId ?? null, cashierProof: boot.cashierProof ?? null, approvals,
       _cashier: user.name, _promotions: [...names.values()].map((p) => ({ name: p.name, savingPence: p.savingPence })), _customer: customer?.name ?? null,
     };
     await enqueue(sale);
@@ -489,7 +492,7 @@ function Selling({ boot, online, pending, setPending, notify, reload }: {
       )}
 
       {overlay?.kind === "override" && (
-        <OverrideModal title={overlay.title} action={overlay.action} onClose={() => setOverlay(null)} onApproved={(name) => { const fn = overlay.then; setOverlay(null); fn(name); }} />
+        <OverrideModal title={overlay.title} action={overlay.action} saleId={saleId} onClose={() => setOverlay(null)} onApproved={(name, token) => { const fn = overlay.then; setOverlay(null); fn(name, token); }} />
       )}
 
       {overlay?.kind === "qty" && (
@@ -594,12 +597,12 @@ function AgeCheck({ age, threshold, onOk, onRefuse }: { age: number; threshold: 
   );
 }
 
-function OverrideModal({ title, action, onClose, onApproved }: { title: string; action: string; onClose: () => void; onApproved: (name: string) => void }) {
+function OverrideModal({ title, action, saleId, onClose, onApproved }: { title: string; action: string; saleId: string; onClose: () => void; onApproved: (name: string, token?: string | null) => void }) {
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
   const go = async () => {
-    const r = await post("/api/till/authorize", { pin, action }).catch(() => ({ ok: false, body: { error: "Needs a connection" } }));
-    if (r.ok) onApproved(r.body.approver.name); else { setErr(r.body.error); setPin(""); beep(false); }
+    const r = await post("/api/till/authorize", { pin, action, saleId }).catch(() => ({ ok: false, body: { error: "Needs a connection" } }));
+    if (r.ok) onApproved(r.body.approver.name, r.body.token); else { setErr(r.body.error); setPin(""); beep(false); }
   };
   return (
     <Modal title={title} onClose={onClose}>

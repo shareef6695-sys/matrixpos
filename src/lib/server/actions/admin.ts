@@ -301,7 +301,11 @@ export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
     const u = await db.user.findFirst({ where: { id, organizationId: s.orgId } });
     if (!u) return { error: "Staff member not found" };
     if (u.role === "OWNER" && s.role !== "OWNER") return { error: "Only an owner can edit an owner" };
+    // Otherwise one manager could set another manager's password or email and sign in as them.
+    if (u.role === "MANAGER" && u.id !== s.userId && s.role !== "OWNER") return { error: "Only an owner can edit another manager" };
     if (u.id === s.userId && role !== u.role) return { error: "You can't change your own role" };
+    // Your own password is changed under My account, which asks for the current one.
+    if (u.id === s.userId && password) return { error: "Change your own password under My account" };
     await db.$transaction([
       // A new email address has to be confirmed again.
       // A new password signs them out on other devices; a new email address has to be confirmed again.

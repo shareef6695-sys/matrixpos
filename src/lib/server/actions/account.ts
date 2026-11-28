@@ -6,7 +6,7 @@ import { db } from "@/lib/server/db";
 import { compare, hash, getAdmin, passwordProblem, requireAdmin } from "@/lib/server/auth";
 import { audit } from "@/lib/server/till";
 import { consumeToken } from "@/lib/server/tokens";
-import { CLOSURE_DAYS, cancelCardSubscription, deleteOrganization, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/server/account";
+import { CLOSURE_DAYS, RESET_TOKEN_MINUTES, cancelCardSubscription, deleteOrganization, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/server/account";
 import { sendEmail } from "@/lib/server/email";
 import { clearAttempts, clientIp, isLimited, overLimit, recordAttempt } from "@/lib/server/ratelimit";
 import { newSecret, verifyTotp } from "@/lib/server/totp";
@@ -45,7 +45,7 @@ export async function forgotPassword(_: FormState, f: FormData): Promise<FormSta
   const user = await db.user.findUnique({ where: { email } });
   if (user?.active && user.passwordHash && !isDemo(user.email) && (user.role === "OWNER" || user.role === "MANAGER")) await sendPasswordResetEmail(user);
   // Same answer either way, so nobody can find out which emails have accounts.
-  return { ok: "If that email has a MatrixPOS account, we've sent a link to reset the password. It works for 1 hour." };
+  return { ok: `If that email has a MatrixPOS account, we've sent a link to reset the password. It works for ${RESET_TOKEN_MINUTES} minutes.` };
 }
 
 export async function resetPassword(_: FormState, f: FormData): Promise<FormState> {
@@ -102,7 +102,7 @@ export async function enableTotp(_: FormState, f: FormData): Promise<FormState> 
   if (isDemo(user.email)) return { error: DEMO };
   if (!user.totpSecret) return { error: "Start again" };
   if (await isLimited(`mfa-setup:${user.id}`, 5, 15)) return { error: "Too many wrong codes. Please wait 15 minutes and try again." };
-  if (!verifyTotp(openSecret(user.totpSecret)!, String(f.get("code") ?? ""))) {
+  if (verifyTotp(openSecret(user.totpSecret)!, String(f.get("code") ?? "")) === false) {
     await recordAttempt([`mfa-setup:${user.id}`], false);
     return { error: "That code isn't right. Check the time on your phone is set automatically." };
   }

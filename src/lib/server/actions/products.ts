@@ -42,6 +42,9 @@ export async function saveProduct(_: FormState, form: FormData): Promise<FormSta
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const d = parsed.data;
   if (d.minAge && ![16, 18, 21].includes(d.minAge)) return { error: "Minimum age must be 16, 18 or 21" };
+  // Category and supplier ids come from the form, so they must belong to this business.
+  if (d.categoryId && !(await db.category.findFirst({ where: { id: d.categoryId, organizationId: s.orgId }, select: { id: true } }))) return { error: "Choose a category" };
+  if (d.supplierId && !(await db.supplier.findFirst({ where: { id: d.supplierId, organizationId: s.orgId }, select: { id: true } }))) return { error: "Choose a supplier" };
 
   const clash = d.barcodes.length
     ? await db.barcode.findFirst({ where: { organizationId: s.orgId, code: { in: d.barcodes }, ...(d.id ? { productId: { not: d.id } } : {}) }, include: { product: true } })
@@ -145,7 +148,9 @@ export async function importProducts(_: FormState, form: FormData): Promise<Form
 export async function saveCategory(form: FormData) {
   const s = await requireAdmin();
   const name = String(form.get("name") ?? "").trim();
-  const color = String(form.get("color") ?? "#64748b");
+  const raw = String(form.get("color") ?? "");
+  // Only a hex colour: the value goes into a style attribute on the till and product list.
+  const color = /^#[0-9a-f]{6}$/i.test(raw) ? raw : "#64748b";
   const id = String(form.get("id") ?? "");
   if (!name) return;
   if (id) await db.category.updateMany({ where: { id, organizationId: s.orgId }, data: { name, color } });

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { accessFor } from "@/lib/plans";
+import { isRevoked } from "./revocation";
 import {
   ADMIN_COOKIE, DEVICE_COOKIE, TILL_COOKIE, verify, atLeast,
   type AdminSession, type AdminToken, type DeviceSession, type TillSession, type Role,
@@ -40,7 +41,7 @@ export const cookieOpts = (maxAge: number) => ({
  */
 export const getAdmin = cache(async (): Promise<AdminSession | null> => {
   const s = await verify<AdminToken>((await cookies()).get(ADMIN_COOKIE)?.value, "admin");
-  if (!s) return null;
+  if (!s || (await isRevoked(s.jti))) return null;
   const u = await db.user.findUnique({ where: { id: s.userId }, select: { active: true, role: true, name: true, organizationId: true, sessionVersion: true } });
   if (!u || !u.active || u.organizationId !== s.orgId || (s.v ?? 0) !== u.sessionVersion) return null;
   if (u.role === "CASHIER" || u.role === "SUPERVISOR") return null;
@@ -78,5 +79,6 @@ export async function getTillUser() {
   const device = await getDevice();
   const till = await verify<TillSession>((await cookies()).get(TILL_COOKIE)?.value, "till");
   if (!device || !till || till.registerId !== device.registerId || till.orgId !== device.orgId) return null;
+  if (await isRevoked(till.jti)) return null;
   return { device, till };
 }

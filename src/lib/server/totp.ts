@@ -33,15 +33,18 @@ export function totpAt(secret: string, counter: number) {
   return String(n % 1_000_000).padStart(6, "0");
 }
 
-/** Accepts the current code and the ones either side, to allow for clock drift. */
-export function verifyTotp(secret: string, code: string, now = Date.now()) {
+/**
+ * Accepts the current code and the ones either side, to allow for clock drift.
+ * Returns the time step the code belongs to (so the caller can refuse it a second time), or false.
+ */
+export function verifyTotp(secret: string, code: string, now = Date.now()): number | false {
   const c = code.replace(/\s/g, "");
   if (!/^\d{6}$/.test(c)) return false;
   const step = Math.floor(now / 30_000);
-  return [-1, 0, 1].some((d) => {
-    const expected = totpAt(secret, step + d);
-    return timingSafeEqual(Buffer.from(expected), Buffer.from(c));
-  });
+  for (const d of [-1, 0, 1]) {
+    if (timingSafeEqual(Buffer.from(totpAt(secret, step + d)), Buffer.from(c))) return step + d;
+  }
+  return false;
 }
 
 export const otpauthUrl = (secret: string, email: string) =>

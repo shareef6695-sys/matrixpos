@@ -20,8 +20,8 @@ export default async function SalePage({ params }: { params: Promise<{ id: strin
   });
   if (!sale) notFound();
   const org = await db.organization.findUnique({ where: { id: s.orgId } });
-  const original = sale.originalSaleId ? await db.sale.findUnique({ where: { id: sale.originalSaleId }, select: { id: true, receiptNo: true } }) : null;
-  const refunds = await db.sale.findMany({ where: { originalSaleId: sale.id }, select: { id: true, receiptNo: true, totalPence: true } });
+  const original = sale.originalSaleId ? await db.sale.findFirst({ where: { id: sale.originalSaleId, organizationId: s.orgId }, select: { id: true, receiptNo: true } }) : null;
+  const refunds = await db.sale.findMany({ where: { originalSaleId: sale.id, organizationId: s.orgId }, select: { id: true, receiptNo: true, totalPence: true } });
 
   return (
     <div>

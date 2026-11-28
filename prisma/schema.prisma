@@ -121,6 +121,8 @@ model Organization {
   journals    JournalEntry[]
   bills       Bill[]
   subscriptionInvoices SubscriptionInvoice[]
+  pricingSnapshots PricingSnapshot[]
+  cardPayments     CardPayment[]
 }
 
 model OrgSettings {
@@ -706,4 +708,53 @@ model SubscriptionInvoice {
   createdAt       DateTime      @default(now())
 
   @@index([organizationId, issuedAt])
+}
+
+/**
+ * Sessions and one-time codes that must not be accepted again before they expire: back office and till
+ * sessions after sign-out, and authenticator codes once used. Rows are purged daily once expired.
+ */
+model RevokedToken {
+  id        String   @id // "jti:<session id>" or "totp:<user id>:<time step>"
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+/**
+ * The prices, VAT codes and offers a till was given (in /api/till/bootstrap), so the server can re-price every
+ * sale itself with exactly what the till had, even if it was offline while prices changed. Kept for 30 days.
+ */
+model PricingSnapshot {
+  id             String       @id // sha256 of the business id and the data
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  data           Json
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+}
+
+/**
+ * A payment on an integrated card machine (Stripe Terminal, SumUp, Dojo), recorded by the server when the till
+ * starts it and marked approved only when the provider says so. A sale can only claim a card machine payment
+ * that is here, approved, for the same sale and amount, and not already used.
+ */
+model CardPayment {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  registerId     String
+  saleId         String
+  provider       String // STRIPE_TERMINAL | SUMUP | DOJO
+  ref            String // the provider's id for this payment attempt
+  amountPence    Int
+  approvedAt     DateTime?
+  reference      String? // provider's transaction id once approved
+  usedAt         DateTime? // set when a sale using this payment is saved
+  createdAt      DateTime     @default(now())
+
+  @@unique([provider, ref])
+  @@index([organizationId, saleId])
 }

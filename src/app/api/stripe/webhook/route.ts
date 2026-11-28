@@ -30,9 +30,12 @@ export const POST = apiRoute("POST /api/stripe/webhook", async (req: Request) =>
     }
     case "customer.subscription.created":
     case "customer.subscription.updated":
-    case "customer.subscription.deleted":
-      await syncSubscription(event.data.object);
+    case "customer.subscription.deleted": {
+      // Stripe can deliver events late or out of order, so act on the subscription as it is now, not as it was in the event.
+      const sub = await s.subscriptions.retrieve(event.data.object.id).catch(() => event.data.object);
+      await syncSubscription(sub);
       break;
+    }
     case "invoice.paid":
     case "invoice.payment_failed": {
       const inv = event.data.object;

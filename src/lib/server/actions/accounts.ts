@@ -39,6 +39,7 @@ export async function saveBill(_: FormState, f: FormData): Promise<FormState> {
   const supplier = str(f, "supplierId") ? await db.supplier.findFirst({ where: { id: str(f, "supplierId"), organizationId: s.orgId } }) : null;
   const payee = str(f, "payee") || supplier?.name;
   if (!payee) return { error: "Enter who it's from" };
+  const po = str(f, "purchaseOrderId") ? await db.purchaseOrder.findFirst({ where: { id: str(f, "purchaseOrderId"), organizationId: s.orgId }, select: { id: true } }) : null;
   const paidFrom = str(f, "paidFromId") ? await ownAccount(s.orgId, str(f, "paidFromId"), { bank: true }) : null;
   const date = ukDate(str(f, "date"));
 
@@ -47,7 +48,7 @@ export async function saveBill(_: FormState, f: FormData): Promise<FormState> {
       data: {
         organizationId: s.orgId, supplierId: supplier?.id ?? null, payee, date, dueDate: str(f, "dueDate") ? ukDate(str(f, "dueDate")) : null,
         reference: str(f, "reference") || null, accountId: account.id, vatCode, netPence, vatPence, grossPence,
-        purchaseOrderId: str(f, "purchaseOrderId") || null, notes: str(f, "notes") || null,
+        purchaseOrderId: po?.id ?? null, notes: str(f, "notes") || null,
         ...(paidFrom ? { paidAt: date, paidFromId: paidFrom.id } : {}),
       },
     });

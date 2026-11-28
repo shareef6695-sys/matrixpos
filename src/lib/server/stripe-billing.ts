@@ -70,7 +70,7 @@ function planFromSubscription(sub: Stripe.Subscription) {
 }
 
 const STATUS: Record<Stripe.Subscription.Status, "ACTIVE" | "PAST_DUE" | "CANCELLED" | null> = {
-  active: "ACTIVE", trialing: "ACTIVE", past_due: "PAST_DUE", unpaid: "PAST_DUE",
+  active: "ACTIVE", trialing: null, past_due: "PAST_DUE", unpaid: "PAST_DUE",
   canceled: "CANCELLED", incomplete_expired: "CANCELLED", incomplete: null, paused: "PAST_DUE",
 };
 
@@ -93,9 +93,11 @@ export async function syncSubscription(sub: Stripe.Subscription, orgIdHint?: str
       stripeSubscriptionId: ended ? null : sub.id,
       ...(plan ? { plan } : {}),
       billingCycle: cycle,
-      // A business that is closing its account stays cancelled.
-      ...(status && !org.closureRequestedAt ? { billingStatus: status } : {}),
-      ...(!ended ? { paidUntil: new Date(sub.current_period_end * 1000) } : {}),
+      // A business that is closing its account stays cancelled, and one the platform owner suspended stays suspended.
+      ...(status && !org.closureRequestedAt && org.billingStatus !== "SUSPENDED" ? { billingStatus: status } : {}),
+      // Paid-until only moves forward once Stripe says the subscription is actually paid ("active"). An incomplete
+      // checkout (card declined, 3-D Secure not finished) or an unpaid renewal doesn't extend it.
+      ...(sub.status === "active" ? { paidUntil: new Date(sub.current_period_end * 1000) } : {}),
     },
   });
   if (plan && plan !== org.plan) await applyPlanToSettings(org.id, plan);
