@@ -91,3 +91,10 @@ export async function documentRate(currency: string, typed: string, at: Date): P
   const stored = await rateFor(currency, at);
   return stored ?? `Add an exchange rate for ${currency} under Currencies first, or type one on the form`;
 }
+
+export async function nextCreditNumber(at = new Date()) {
+  for (;;) {
+    const number = `MPC-${year(at)}-${code()}`;
+    if (!(await db.hqCreditNote.findUnique({ where: { number } }))) return number;
+  }
+}

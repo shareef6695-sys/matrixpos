@@ -25,3 +25,30 @@ export const INVOICE_STATUS: Record<string, { label: string; cls: string }> = {
   PAID: { label: "Paid", cls: "bg-emerald-100 text-emerald-800" },
   VOID: { label: "Void", cls: "bg-slate-200 text-slate-600" },
 };
+
+// ---------------- The books ----------------
+
+export const SOURCE_LABEL: Record<string, string> = {
+  INVOICE: "Invoice", INVOICE_VOID: "Invoice voided", PAYMENT: "Payment received", CREDIT_NOTE: "Credit note", BILL: "Bill",
+  BILL_VOID: "Bill voided", BILL_PAYMENT: "Bill paid", BANK: "Bank line", MANUAL: "Journal",
+};
+
+export function sourceLink(source: string, sourceId: string | null, ref?: { invoiceId?: string; billId?: string; accountId?: string }) {
+  if (!sourceId) return null;
+  if (source === "INVOICE" || source === "INVOICE_VOID") return `/platform/invoices/${sourceId}`;
+  if (source === "CREDIT_NOTE") return `/platform/credit-notes/${sourceId}`;
+  if (source === "BILL" || source === "BILL_VOID") return `/platform/bills/${sourceId}`;
+  if (source === "PAYMENT" && ref?.invoiceId) return `/platform/invoices/${ref.invoiceId}`;
+  if (source === "BILL_PAYMENT" && ref?.billId) return `/platform/bills/${ref.billId}`;
+  if (source === "BANK" && ref?.accountId) return `/platform/bank/${ref.accountId}`;
+  return null;
+}
+
+export const BILL_STATUS: Record<string, { label: string; cls: string }> = {
+  OPEN: { label: "Unpaid", cls: "bg-amber-100 text-amber-800" },
+  PARTIAL: { label: "Part paid", cls: "bg-sky-100 text-sky-800" },
+  PAID: { label: "Paid", cls: "bg-emerald-100 text-emerald-800" },
+  VOID: { label: "Void", cls: "bg-slate-200 text-slate-600" },
+};
+
+export const FREQUENCY_LABEL = { WEEKLY: "Every week", MONTHLY: "Every month", QUARTERLY: "Every 3 months", YEARLY: "Every year" } as const;

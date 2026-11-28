@@ -9,6 +9,8 @@ import { ErrorBanner, Pill } from "@/components/hq/ui";
 import { ActionForm } from "@/components/FormMessage";
 import { PrintButton } from "@/components/PrintButton";
 import { invoiceAction, recordPayment, deletePayment } from "@/lib/server/actions/hq-sales";
+import { createCreditNote } from "@/lib/server/actions/hq-books";
+import { accountOptions } from "@/lib/server/hq-forms";
 import { formatMoney, minorToInput } from "@/lib/hq/money";
 import { formatGBP } from "@/lib/pos/money";
 import { INVOICE_STATUS, PAYMENT_METHODS, PAYMENT_METHOD_LABEL } from "@/lib/hq/labels";
@@ -29,12 +31,13 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
   const h = await requireHq("invoices.view");
   const { id } = await params;
   const { error } = await searchParams;
-  const inv = await db.hqInvoice.findUnique({ where: { id }, include: { client: { include: { contacts: true } }, lines: { orderBy: { position: "asc" } }, payments: { orderBy: { date: "asc" } }, quote: { select: { id: true, number: true } } } });
+  const inv = await db.hqInvoice.findUnique({ where: { id }, include: { client: { include: { contacts: true } }, lines: { orderBy: { position: "asc" } }, payments: { orderBy: { date: "asc" } }, creditNotes: { orderBy: { date: "asc" } }, quote: { select: { id: true, number: true } } } });
   if (!inv) notFound();
   const edit = h.can("invoices.edit");
   const pay = h.can("payments.edit");
   const left = inv.totalMinor - inv.paidMinor;
   const link = `${await appUrl()}/i/${inv.publicToken}`;
+  const banks = pay ? (await accountOptions()).banks.filter((b) => b.currency === "GBP" || b.currency === inv.currency) : [];
   // A draft shows the client's details as they are now; once sent, as they were on the day.
   const to = inv.status === "DRAFT" ? billTo(inv.client) : inv;
   return (
@@ -78,10 +81,10 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
             <ul className="space-y-2">
               {inv.payments.map((p) => (
                 <li key={p.id} className="flex items-start justify-between gap-2">
-                  <span>{fmtDate(p.date)} · {PAYMENT_METHOD_LABEL[p.method as keyof typeof PAYMENT_METHOD_LABEL] ?? p.method}{p.reference ? ` · ${p.reference}` : ""}
+                  <span>{fmtDate(p.date)} · {p.creditNoteId ? "Credit note" : PAYMENT_METHOD_LABEL[p.method as keyof typeof PAYMENT_METHOD_LABEL] ?? p.method}{p.reference ? ` · ${p.reference}` : ""}
                     {inv.currency !== "GBP" && <div className="text-xs text-slate-500">{formatGBP(p.gbpPence)} at {Number(p.perGbp)}</div>}</span>
                   <span className="text-right tabular-nums">{formatMoney(p.amountMinor, inv.currency)}
-                    {pay && <form action={deletePayment}><input type="hidden" name="id" value={p.id} /><button className="text-xs text-red-600">Delete</button></form>}</span>
+                    {pay && !p.creditNoteId && <form action={deletePayment}><input type="hidden" name="id" value={p.id} /><button className="text-xs text-red-600">Delete</button></form>}</span>
                 </li>
               ))}
               {!inv.payments.length && <li className="text-slate-500">None yet.</li>}
@@ -98,10 +101,39 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
                 <label className="label">Date received</label>
                 <input name="date" type="date" className="input" defaultValue={londonDate()} required />
                 <select name="method" className="input" defaultValue="BANK">{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABEL[m]}</option>)}</select>
+                <label className="label">Paid into</label>
+                <select name="bankAccountId" className="input">{banks.map((b) => <option key={b.id} value={b.id}>{b.code} {b.name} ({b.currency})</option>)}</select>
                 <input name="reference" className="input" placeholder="Reference (optional)" />
                 {inv.currency !== "GBP" && <input name="perGbp" className="input" inputMode="decimal" placeholder={`£1 = ? ${inv.currency} on the day (blank = saved rate)`} />}
               </ActionForm>
             </div>
+          )}
+          {inv.creditNotes.length > 0 && (
+            <div className="card text-sm">
+              <h2 className="mb-2 font-semibold">Credit notes</h2>
+              <ul className="space-y-1">
+                {inv.creditNotes.map((c) => (
+                  <li key={c.id} className="flex justify-between gap-2">
+                    <Link href={`/platform/credit-notes/${c.id}`} className="font-mono text-xs font-semibold text-violet-700">{c.number}</Link>
+                    <span className="tabular-nums">{c.status === "VOID" ? "Void" : formatMoney(c.totalMinor, inv.currency)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {edit && (inv.status === "SENT" || inv.status === "PARTIAL") && (
+            <details className="card">
+              <summary className="cursor-pointer font-semibold">Issue a credit note</summary>
+              <p className="my-2 text-xs text-slate-500">Reduces what the client owes on this invoice, for a discount agreed later, a cancelled part of the work or a mistake.</p>
+              <ActionForm action={createCreditNote} className="space-y-2" submit="Issue credit note">
+                <input type="hidden" name="invoiceId" value={inv.id} />
+                <label className="label">Amount to credit ({inv.currency})</label>
+                <input name="amount" className="input" inputMode="decimal" defaultValue={minorToInput(left, inv.currency)} required />
+                <label className="label">Date</label>
+                <input name="date" type="date" className="input" defaultValue={londonDate()} required />
+                <input name="reason" className="input" placeholder="Reason (shown on the credit note)" />
+              </ActionForm>
+            </details>
           )}
         </div>
       </div>

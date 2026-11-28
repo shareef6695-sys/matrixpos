@@ -11,6 +11,18 @@ import { parseMoney, toGbpPence } from "@/lib/hq/money";
 import { PAYMENT_METHODS } from "@/lib/hq/labels";
 import { seller } from "@/lib/legal";
 import { londonDate, londonDayStart, addDays } from "@/lib/dates";
+import { HqLockedError, assertOpen, bankAccount, bankAmount, postInvoice, postInvoiceVoid, postPayment, unpostHq } from "@/lib/server/hq-books";
+
+/** Runs a change that touches the books; a locked period comes back as a message instead of an error page. */
+async function guarded<T>(f: () => Promise<T>): Promise<T | { locked: string }> {
+  try {
+    return await f();
+  } catch (e) {
+    if (e instanceof HqLockedError) return { locked: e.message };
+    throw e;
+  }
+}
+const isLocked = (r: unknown): r is { locked: string } => !!r && typeof r === "object" && "locked" in r;
 import type { FormState } from "./auth";
 
 const str = (f: FormData, k: string, max = 500) => String(f.get(k) ?? "").trim().slice(0, max);
@@ -140,10 +152,14 @@ export async function saveInvoice(_: FormState, f: FormData): Promise<FormState>
     if (!inv) return { error: "Invoice not found" };
     if (inv.status !== "DRAFT" && inv.status !== "SENT") return { error: "Only a draft or unpaid invoice can be changed" };
     if (inv._count.payments) return { error: "This invoice has payments, so it can't be changed. Delete the payments first." };
-    await db.$transaction([
-      db.hqLine.deleteMany({ where: { invoiceId: id } }),
-      db.hqInvoice.update({ where: { id }, data: { ...data, lines: { create: lines } } }),
-    ]);
+    // A sent invoice is already in the books: take it out and put the changed one back in.
+    const r = await guarded(() => db.$transaction(async (tx) => {
+      if (inv.status === "SENT") { await unpostHq(tx, "INVOICE", id); await assertOpen(d.issueDate, tx); }
+      await tx.hqLine.deleteMany({ where: { invoiceId: id } });
+      await tx.hqInvoice.update({ where: { id }, data: { ...data, lines: { create: lines } } });
+      if (inv.status === "SENT") await postInvoice(tx, id, h.userId);
+    }));
+    if (isLocked(r)) return { error: r.locked };
     await hqAudit(h, "invoice.update", { invoiceId: id, total: d.totals.totalMinor, currency: d.currency });
   } else {
     const inv = await db.hqInvoice.create({ data: { ...data, number: await nextInvoiceNumber(d.issueDate), publicToken: publicToken(), createdById: h.userId, lines: { create: lines } } });
@@ -164,12 +180,24 @@ export async function invoiceAction(f: FormData) {
   if (op === "send" || op === "mark-sent") {
     if (inv.status === "VOID") return;
     // The bill-to details are fixed as they are on the day it goes out.
-    if (inv.status === "DRAFT") await db.hqInvoice.update({ where: { id }, data: { status: "SENT", sentAt: new Date(), ...billTo(inv.client) } });
+    if (inv.status === "DRAFT") {
+      const r = await guarded(() => db.$transaction(async (tx) => {
+        await tx.hqInvoice.update({ where: { id }, data: { status: "SENT", sentAt: new Date(), ...billTo(inv.client) } });
+        await postInvoice(tx, id, h.userId);
+      }));
+      if (isLocked(r)) redirect(`/platform/invoices/${id}?error=${encodeURIComponent(r.locked)}`);
+    }
     if (op === "send") msg = await emailHqInvoice(id);
     if (!msg && op === "send") await db.hqInvoice.update({ where: { id }, data: { sentAt: new Date() } });
   } else if (op === "void" && inv.status !== "VOID") {
     if (inv._count.payments) msg = "Delete the payments on this invoice before voiding it";
-    else await db.hqInvoice.update({ where: { id }, data: { status: "VOID", voidedAt: new Date() } });
+    else {
+      const r = await guarded(() => db.$transaction(async (tx) => {
+        await tx.hqInvoice.update({ where: { id }, data: { status: "VOID", voidedAt: new Date() } });
+        await postInvoiceVoid(tx, id, h.userId);
+      }));
+      if (isLocked(r)) msg = r.locked;
+    }
   } else if (op === "delete" && inv.status === "DRAFT") {
     await db.$transaction([
       db.hqQuote.updateMany({ where: { id: inv.quoteId ?? "", status: "INVOICED" }, data: { status: "ACCEPTED" } }),
@@ -199,12 +227,18 @@ export async function recordPayment(_: FormState, f: FormData): Promise<FormStat
   if (!method.success) return { error: "Choose how it was paid" };
   const rate = await documentRate(inv.currency, str(f, "perGbp", 30), date);
   if (typeof rate === "string") return { error: rate };
-  await db.$transaction(async (tx) => {
-    await tx.hqPayment.create({
-      data: { invoiceId: id, date, amountMinor: amount, perGbp: rate, gbpPence: toGbpPence(amount, inv.currency, rate), method: method.data, reference: opt(f, "reference", 120), notes: opt(f, "notes", 500), userId: h.userId },
+  const bank = await bankAccount(db, opt(f, "bankAccountId", 40));
+  if (!bank) return { error: "Add a bank account under Accounts first" };
+  const gbp = toGbpPence(amount, inv.currency, rate);
+  if (bankAmount(bank.currency, inv.currency, amount, gbp) === null) return { error: `${bank.name} is in ${bank.currency}. Choose a GBP or ${inv.currency} account.` };
+  const r = await guarded(() => db.$transaction(async (tx) => {
+    const p = await tx.hqPayment.create({
+      data: { invoiceId: id, date, amountMinor: amount, perGbp: rate, gbpPence: gbp, method: method.data, bankAccountId: bank.id, reference: opt(f, "reference", 120), notes: opt(f, "notes", 500), userId: h.userId },
     });
     await settleInvoice(tx, id);
-  });
+    await postPayment(tx, p.id, h.userId);
+  }));
+  if (isLocked(r)) return { error: r.locked };
   await hqAudit(h, "payment.create", { invoiceId: id, amount, currency: inv.currency });
   revalidatePath(`/platform/invoices/${id}`);
   return { ok: "Payment recorded" };
@@ -214,10 +248,13 @@ export async function deletePayment(f: FormData) {
   const h = await requireHq("payments.edit");
   const p = await db.hqPayment.findUnique({ where: { id: str(f, "id", 40) } });
   if (!p) return;
-  await db.$transaction(async (tx) => {
+  if (p.creditNoteId) redirect(`/platform/invoices/${p.invoiceId}?error=${encodeURIComponent("This is a credit note. Void the credit note instead.")}`);
+  const r = await guarded(() => db.$transaction(async (tx) => {
+    await unpostHq(tx, "PAYMENT", p.id);
     await tx.hqPayment.delete({ where: { id: p.id } });
     await settleInvoice(tx, p.invoiceId);
-  });
+  }));
+  if (isLocked(r)) redirect(`/platform/invoices/${p.invoiceId}?error=${encodeURIComponent(r.locked)}`);
   await hqAudit(h, "payment.delete", { invoiceId: p.invoiceId, amount: p.amountMinor });
   revalidatePath(`/platform/invoices/${p.invoiceId}`);
 }

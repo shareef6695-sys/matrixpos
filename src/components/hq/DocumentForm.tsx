@@ -17,8 +17,10 @@ let nextKey = 1;
 const blank = (): Row => ({ key: nextKey++, itemId: null, description: "", quantity: "1", unit: "", discountPct: "", taxPct: "" });
 
 /** The quote / invoice editor. Totals here are a preview only: the server works every amount out again. */
-export function DocumentForm({ kind, action, clients, items, currencies, rates, chargeVat, defaults }: {
-  kind: "quote" | "invoice";
+export function DocumentForm({ kind, action, clients, items, currencies, rates, chargeVat, defaults, extra }: {
+  kind: "quote" | "invoice" | "recurring";
+  /** More fields for the top card (the repeating invoice's schedule). */
+  extra?: React.ReactNode;
   action: (s: FormState, f: FormData) => Promise<FormState>;
   clients: FormClient[]; items: FormItem[]; currencies: string[]; rates: Record<string, number>; chargeVat: boolean;
   defaults: DocumentDefaults;
@@ -68,8 +70,8 @@ export function DocumentForm({ kind, action, clients, items, currencies, rates, 
           </select>
         </div>
         <div className="sm:col-span-2"><label className="label">Title (optional)</label><input name="title" className="input" defaultValue={defaults.title} placeholder="e.g. Booking app, phase 1" /></div>
-        <div><label className="label">{kind === "quote" ? "Quote date" : "Invoice date"}</label><input type="date" name="issueDate" className="input" defaultValue={defaults.issueDate} required /></div>
-        <div><label className="label">{kind === "quote" ? "Valid until" : "Due date"} (blank = {kind === "quote" ? "30 days" : "client's terms"})</label><input type="date" name={kind === "quote" ? "expiryDate" : "dueDate"} className="input" defaultValue={defaults.endDate} /></div>
+        <div><label className="label">{kind === "quote" ? "Quote date" : kind === "recurring" ? "Next invoice date" : "Invoice date"}</label><input type="date" name="issueDate" className="input" defaultValue={defaults.issueDate} required /></div>
+        {kind !== "recurring" && <div><label className="label">{kind === "quote" ? "Valid until" : "Due date"} (blank = {kind === "quote" ? "30 days" : "client's terms"})</label><input type="date" name={kind === "quote" ? "expiryDate" : "dueDate"} className="input" defaultValue={defaults.endDate} /></div>}
         <div>
           <label className="label">Currency</label>
           <select name="currency" className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
@@ -78,10 +80,13 @@ export function DocumentForm({ kind, action, clients, items, currencies, rates, 
         </div>
         <div>
           <label className="label">{needsRate ? `£1 = ? ${currency}` : "Exchange rate"}</label>
-          {needsRate
+          {needsRate && kind === "recurring"
+            ? <input className="input bg-slate-50" value="The rate on each invoice's date" readOnly />
+            : needsRate
             ? <input name="perGbp" className="input" inputMode="decimal" defaultValue={defaults.perGbp} placeholder={rates[currency] ? `${rates[currency]} (latest saved)` : "Type a rate"} />
             : <input className="input bg-slate-50" value="Base currency" readOnly />}
         </div>
+        {extra}
       </div>
 
       <div className="card overflow-x-auto p-0">
@@ -127,7 +132,7 @@ export function DocumentForm({ kind, action, clients, items, currencies, rates, 
         <div><label className="label">Terms</label><textarea name="terms" className="input min-h-24" defaultValue={defaults.terms} /></div>
       </div>
       {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
-      <button className="btn-primary" disabled={pending}>{pending ? "Saving…" : defaults.id ? "Save changes" : `Create ${kind}`}</button>
+      <button className="btn-primary" disabled={pending}>{pending ? "Saving…" : defaults.id ? "Save changes" : kind === "recurring" ? "Save repeating invoice" : `Create ${kind}`}</button>
     </form>
   );
 }

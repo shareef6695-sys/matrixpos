@@ -23,3 +23,11 @@ export const linesForForm = (lines: HqLine[], currency: string) =>
   }));
 
 export const ymd = (d: Date | null | undefined) => (d ? londonDate(d) : undefined);
+
+/** Accounts for the pickers on bills, journals and bank lines. */
+export async function accountOptions() {
+  const { ensureHqChart } = await import("./hq-books");
+  await ensureHqChart();
+  const all = await db.hqAccount.findMany({ where: { archived: false }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true, type: true, isBank: true, currency: true } });
+  return { all, banks: all.filter((a) => a.isBank), nonBank: all.filter((a) => !a.isBank) };
+}

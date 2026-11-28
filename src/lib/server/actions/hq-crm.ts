@@ -183,7 +183,12 @@ export async function saveItem(_: FormState, f: FormData): Promise<FormState> {
     const other = await db.hqItem.findUnique({ where: { sku } });
     if (other && other.id !== id) return { error: "Another item already uses that code" };
   }
+  // Where its sales go in the books: an income account, or blank to go by the item's type.
+  const incomeId = opt(f, "incomeAccountId", 40);
+  const income = incomeId ? await db.hqAccount.findFirst({ where: { id: incomeId, type: "INCOME" } }) : null;
+  if (incomeId && !income) return { error: "Choose an income account" };
   const data = {
+    incomeAccountId: income?.id ?? null,
     name, sku, kind: kind.data, description: opt(f, "description", 2000), unit: str(f, "unit", 20) || "each", currency, priceMinor: price, costMinor: cost,
     vendor: opt(f, "vendor", 120), url, active: id ? f.get("active") === "on" : true,
   };
