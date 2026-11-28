@@ -7,7 +7,10 @@ import { billTo } from "@/lib/server/hq-docs";
 import { HqDocument } from "@/components/hq/HqDocument";
 import { ErrorBanner, Pill } from "@/components/hq/ui";
 import { ActionForm } from "@/components/FormMessage";
-import { PrintButton } from "@/components/PrintButton";
+import { DocActions } from "@/components/hq/DocActions";
+import { phoneOf } from "@/lib/server/hq-pdf";
+import { shareText } from "@/lib/hq/share";
+import { seller } from "@/lib/legal";
 import { invoiceAction, recordPayment, deletePayment } from "@/lib/server/actions/hq-sales";
 import { createCreditNote } from "@/lib/server/actions/hq-books";
 import { accountOptions } from "@/lib/server/hq-forms";
@@ -56,7 +59,10 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
           {edit && (inv.status === "DRAFT" || inv.status === "SENT") && !inv.payments.length && <Link href={`/platform/invoices/${inv.id}/edit`} className="btn-secondary">Edit</Link>}
           {edit && inv.status !== "VOID" && <Op id={inv.id} op="send" label={inv.status === "DRAFT" ? `Email to ${to.billToEmail ?? "client"}` : inv.status === "PAID" ? "Email receipt" : "Email again"} primary />}
           {edit && inv.status === "DRAFT" && <Op id={inv.id} op="mark-sent" label="Mark as sent" />}
-          <PrintButton />
+          <DocActions pdf={`/api/hq/pdf/invoice/${inv.id}`} whatsapp={inv.status === "DRAFT" || inv.status === "VOID" ? null : {
+            phone: phoneOf(inv.client),
+            text: shareText({ kind: "invoice", number: inv.number, to: to.billToName ?? inv.client.name, amount: formatMoney(inv.status === "PAID" ? inv.totalMinor : left, inv.currency), date: fmtDate(inv.dueDate), paid: inv.status === "PAID", from: seller().name, link }),
+          }} />
           {edit && inv.status !== "VOID" && inv.status !== "DRAFT" && !inv.payments.length && <Op id={inv.id} op="void" label="Void" danger />}
           {edit && inv.status === "DRAFT" && <Op id={inv.id} op="delete" label="Delete draft" danger />}
         </div>

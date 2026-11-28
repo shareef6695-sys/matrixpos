@@ -117,3 +117,20 @@ describe("HMRC fraud prevention headers", () => {
     expect(h["Gov-Vendor-Forwarded"]).toBe("for=198.51.100.7");
   });
 });
+
+import { shareText, waLink, waNumber } from "@/lib/hq/share";
+describe("sharing by WhatsApp", () => {
+  it("turns typed phone numbers into WhatsApp's form", () => {
+    expect(waNumber("07700 900123")).toBe("447700900123");
+    expect(waNumber("+44 (0)7700-900123")).toBe("447700900123");
+    expect(waNumber("0092 300 1234567")).toBe("923001234567");
+    expect(waNumber("+971 50 123 4567")).toBe("971501234567");
+    expect(waNumber("12")).toBeNull();
+    expect(waNumber(null)).toBeNull();
+  });
+  it("builds the link with the message", () => {
+    expect(waLink("07700 900123", "Hi & bye")).toBe("https://wa.me/447700900123?text=Hi%20%26%20bye");
+    expect(waLink(null, "Hi")).toBe("https://wa.me/?text=Hi");
+    expect(shareText({ kind: "invoice", number: "MPI-1", to: "Acme", amount: "£10.00", date: "01 Dec 2026", from: "Matrix Infotech Ltd", link: "https://x/i/t" })).toContain("invoice MPI-1 for £10.00, due by 01 Dec 2026. View or download it here: https://x/i/t");
+  });
+});

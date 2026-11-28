@@ -59,6 +59,13 @@ A live bank feed (Open Banking through a provider such as GoCardless Bank Accoun
 
 Pure logic (durations, time-to-invoice lines, renewal dates) is in `src/lib/hq/projects.ts` and unit tested.
 
+## Printing, PDFs, email and WhatsApp
+
+- Quotes, invoices and credit notes have **Print** (the browser's print preview), **Preview PDF** (opens the PDF in a new tab) and **Download PDF**. The PDF is drawn on the server with `pdf-lib` (`src/lib/server/hq-pdf.ts`), A4, with the same content as the page; it runs over more pages with page numbers when needed. The standard PDF fonts cover Western European text; other characters show as "?".
+- HQ staff get PDFs from `/api/hq/pdf/{quote|invoice|credit}/{id}` (drafts included, needs `quotes.view` or `invoices.view`). Clients get theirs from `/api/doc/{kind}/{publicToken}`, never for drafts; the client pages have a Download PDF button.
+- Emailing a quote or invoice attaches its PDF as well as the link. If the PDF can't be made, the email still goes with the link.
+- **WhatsApp** opens `wa.me` with the client's phone (the client's own, else the primary contact's; UK numbers get 44) and a short message with the document link. WhatsApp links can't carry a file, so the link opens the document, where the PDF can be downloaded. With no phone saved, WhatsApp asks who to send it to. Not shown for drafts or voided documents.
+
 ## VAT, Making Tax Digital and year end (phase 4)
 
 - **MatrixPOS billing in the books.** Subscription invoices (`SubscriptionInvoice`) post as sales to 4020 (Dr debtors, Cr MatrixPOS subscriptions and VAT). Paid by card, the money goes to 1250 Stripe and PayPal balances; by bank transfer, to 1200. A voided one is reversed. Opening *Books* brings in any not yet posted.

@@ -6,10 +6,14 @@ import { appUrl } from "@/lib/server/email";
 import { billTo } from "@/lib/server/hq-docs";
 import { HqDocument } from "@/components/hq/HqDocument";
 import { ErrorBanner, Pill } from "@/components/hq/ui";
-import { PrintButton } from "@/components/PrintButton";
+import { DocActions } from "@/components/hq/DocActions";
+import { phoneOf } from "@/lib/server/hq-pdf";
+import { shareText } from "@/lib/hq/share";
+import { seller } from "@/lib/legal";
 import { quoteAction, quoteToInvoice } from "@/lib/server/actions/hq-sales";
 import { QUOTE_STATUS } from "@/lib/hq/labels";
-import { fmtDateTime } from "@/lib/dates";
+import { fmtDate, fmtDateTime } from "@/lib/dates";
+import { formatMoney } from "@/lib/hq/money";
 
 export const metadata = { title: "Quote" };
 
@@ -52,7 +56,10 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
             <form action={quoteToInvoice}><input type="hidden" name="id" value={q.id} /><button className="btn-primary">Turn into invoice</button></form>
           )}
           {q.invoice && <Link href={`/platform/invoices/${q.invoice.id}`} className="btn-secondary">Invoice {q.invoice.number}</Link>}
-          <PrintButton />
+          <DocActions pdf={`/api/hq/pdf/quote/${q.id}`} whatsapp={q.status === "DRAFT" ? null : {
+            phone: phoneOf(q.client),
+            text: shareText({ kind: "quote", number: q.number, to: to.billToName, amount: formatMoney(q.totalMinor, q.currency), date: q.expiryDate ? fmtDate(q.expiryDate) : null, from: seller().name, link }),
+          }} />
           {edit && q.status === "DRAFT" && <Op id={q.id} op="delete" label="Delete draft" confirm />}
         </div>
       </div>

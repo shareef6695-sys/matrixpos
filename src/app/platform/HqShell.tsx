@@ -5,11 +5,11 @@ import { useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
 import { logout } from "@/lib/server/actions/auth";
 
-export interface NavGroup { title: string | null; items: { href: string; label: string; icon: IconName }[] }
+export interface NavGroup { title: string | null; icon: IconName; items: { href: string; label: string; icon: IconName }[] }
 export type IconName = "home" | "leads" | "clients" | "quotes" | "invoices" | "currencies" | "catalogue" | "team" | "shops" | "recurring" | "bank" | "bills" | "suppliers" | "books" | "reports" | "projects" | "time" | "contracts";
 
 // Outline icons, 24x24, drawn with the current text colour.
-const ICONS: Record<IconName | "collapse" | "menu" | "close" | "logout", string> = {
+const ICONS: Record<IconName | "collapse" | "chevron" | "menu" | "close" | "logout", string> = {
   home: "M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z",
   leads: "M3 4h18l-7 8.5V19l-4 2v-8.5z",
   clients: "M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M22 19v-1a4 4 0 0 0-3-3.87M16 3.13a3.5 3.5 0 0 1 0 6.75",
@@ -29,6 +29,7 @@ const ICONS: Record<IconName | "collapse" | "menu" | "close" | "logout", string>
   time: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20M12 6v6l4 2",
   contracts: "M9 12l2 2 4-4M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2",
   collapse: "M15 6l-6 6 6 6",
+  chevron: "M9 6l6 6-6 6",
   menu: "M4 6h16M4 12h16M4 18h16",
   logout: "M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3",
   close: "M6 6l12 12M18 6 6 18",
@@ -42,7 +43,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: keyof typeof ICONS; class
   );
 }
 
-/** HQ's page frame: a left sidebar that collapses to icons (remembered in a cookie), and a slide-out menu on phones. */
+/** HQ's page frame: a left sidebar of modules that fold open to their sub-modules, collapsing to icons (remembered in a cookie), and a slide-out menu on phones. */
 export function HqShell({ groups, who, isOwner, initialCollapsed, children }: {
   groups: NavGroup[]; who: string; isOwner: boolean; initialCollapsed: boolean; children: React.ReactNode;
 }) {
@@ -63,32 +64,78 @@ export function HqShell({ groups, who, isOwner, initialCollapsed, children }: {
   const active = (href: string) => (href === "/platform" ? path === href || /^\/platform\/c[a-z0-9]{20,}$/.test(path)
     : under(href) && !hrefs.some((o) => o.length > href.length && o.startsWith(href) && under(o)));
 
+  // Drill-down: each module folds open to its sub-modules. The module you're in opens by itself; opening another closes it.
+  const home = (g: NavGroup) => g.items.some((i) => active(i.href));
+  const current = groups.find((g) => g.title && home(g))?.title ?? null;
+  const [expanded, setExpanded] = useState<string | null>(current);
+  // With the sidebar shrunk to icons, a module's sub-modules pop out beside it.
+  const [fly, setFly] = useState<{ title: string; top: number } | null>(null);
+  useEffect(() => { setExpanded(current); setFly(null); }, [current, path]);
+  useEffect(() => {
+    if (!fly) return;
+    const close = (e: MouseEvent | KeyboardEvent) => { if (e instanceof KeyboardEvent ? e.key === "Escape" : !(e.target as HTMLElement).closest("[data-flyout]")) setFly(null); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", close); };
+  }, [fly]);
+
+  const link = (it: NavGroup["items"][number], compact: boolean, sub: boolean, onPick?: () => void) => (
+    <Link
+      href={it.href}
+      onClick={onPick}
+      title={compact ? it.label : undefined}
+      aria-label={compact ? it.label : undefined}
+      aria-current={active(it.href) ? "page" : undefined}
+      className={`flex items-center gap-3 rounded-lg text-sm ${sub ? "py-1.5 pl-11 pr-3" : `py-2 font-medium ${compact ? "justify-center px-2" : "px-3"}`} ${active(it.href) ? "bg-violet-50 font-semibold text-violet-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
+    >
+      {!sub && <Icon name={it.icon} />}
+      {!compact && <span className="truncate">{it.label}</span>}
+    </Link>
+  );
+
   const nav = (compact: boolean, onPick?: () => void) => (
-    <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
-      {groups.map((g, gi) => (
-        <div key={gi}>
-          {g.title && (compact ? <div className="mx-3 mb-2 border-t border-slate-200" /> : <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{g.title}</div>)}
-          <ul className="space-y-0.5">
-            {g.items.map((it) => (
-              <li key={it.href}>
-                <Link
-                  href={it.href}
-                  onClick={onPick}
-                  title={compact ? it.label : undefined}
-                  aria-label={compact ? it.label : undefined}
-                  aria-current={active(it.href) ? "page" : undefined}
-                  className={`flex items-center gap-3 rounded-lg py-2 text-sm font-medium ${compact ? "justify-center px-2" : "px-3"} ${active(it.href) ? "bg-violet-50 text-violet-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
-                >
-                  <Icon name={it.icon} />
-                  {!compact && <span className="truncate">{it.label}</span>}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+    <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3" aria-label="Matrix HQ">
+      {groups.map((g, gi) => {
+        if (!g.title) return <div key={gi}>{g.items.map((it) => <div key={it.href}>{link(it, compact, false, onPick)}</div>)}</div>;
+        const isOpen = expanded === g.title;
+        const here = home(g);
+        const cls = `flex w-full items-center gap-3 rounded-lg py-2 text-sm font-medium ${here ? "text-violet-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`;
+        if (compact) {
+          return (
+            <button key={gi} type="button" data-flyout title={g.title} aria-label={g.title} aria-expanded={fly?.title === g.title}
+              onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setFly(fly?.title === g.title ? null : { title: g.title!, top: r.top }); }}
+              className={`${cls} justify-center px-2 ${here ? "bg-violet-50" : ""}`}>
+              <Icon name={g.icon} />
+            </button>
+          );
+        }
+        return (
+          <div key={gi}>
+            <button type="button" onClick={() => setExpanded(isOpen ? null : g.title)} aria-expanded={isOpen} className={`${cls} px-3`}>
+              <Icon name={g.icon} />
+              <span className="flex-1 truncate text-left">{g.title}</span>
+              <Icon name="chevron" className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+            </button>
+            {isOpen && <div className="mb-1 mt-0.5 space-y-0.5">{g.items.map((it) => <div key={it.href}>{link(it, false, true, onPick)}</div>)}</div>}
+          </div>
+        );
+      })}
     </nav>
   );
+
+  const flyout = fly && (() => {
+    const g = groups.find((x) => x.title === fly.title);
+    if (!g) return null;
+    return (
+      <div data-flyout className="fixed left-[72px] z-50 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg print:hidden" style={{ top: Math.min(fly.top, (typeof window === "undefined" ? 800 : window.innerHeight) - 48 - g.items.length * 36) }}>
+        <div className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{g.title}</div>
+        {g.items.map((it) => (
+          <Link key={it.href} href={it.href} onClick={() => setFly(null)} aria-current={active(it.href) ? "page" : undefined}
+            className={`block rounded-lg px-3 py-1.5 text-sm ${active(it.href) ? "bg-violet-50 font-semibold text-violet-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{it.label}</Link>
+        ))}
+      </div>
+    );
+  })();
 
   const footer = (compact: boolean) => (
     <div className={`border-t border-slate-200 p-3 text-sm ${compact ? "space-y-2 text-center" : "space-y-2"}`}>
@@ -117,9 +164,10 @@ export function HqShell({ groups, who, isOwner, initialCollapsed, children }: {
         {nav(collapsed)}
         {footer(collapsed)}
       </aside>
+      {collapsed && flyout}
 
       {/* Phone and tablet top bar */}
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 print:hidden lg:hidden">
+      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 print:hidden lg:hidden">
         <button type="button" onClick={() => setOpen(true)} className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100" aria-label="Open menu" aria-expanded={open}><Icon name="menu" className="h-6 w-6" /></button>
         <Link href="/platform/home" className="flex items-center gap-2"><Logo className="text-lg" /><span className="badge bg-violet-100 text-violet-800">HQ</span></Link>
         <span className="w-9" />
