@@ -32,7 +32,7 @@ export async function saveBill(_: FormState, f: FormData): Promise<FormState> {
   else ({ netPence, vatPence } = splitVat(amount, rate));
   if (str(f, "vatOverride")) {
     const v = parseGBP(str(f, "vatOverride"));
-    if (v == null || v < 0) return { error: "VAT amount is not valid" };
+    if (v == null || v < 0 || (str(f, "amountIncludes") !== "net" && v > amount)) return { error: "VAT amount is not valid" };
     if (str(f, "amountIncludes") === "net") vatPence = v; else { netPence = amount - v; vatPence = v; }
   }
   const grossPence = netPence + vatPence;

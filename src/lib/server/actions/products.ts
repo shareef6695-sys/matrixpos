@@ -89,6 +89,7 @@ export async function importProducts(_: FormState, form: FormData): Promise<Form
   if (file.size > 5_000_000) return { error: "File is too large (5 MB max)" };
   const rows = parseCsv(await file.text());
   if (rows.length < 2) return { error: "The file has no rows" };
+  if (rows.length > 20_001) return { error: "The file has too many rows (20,000 max). Split it into smaller files." };
   const head = rows[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
   const col = (r: string[], name: string) => { const i = head.indexOf(name); return i >= 0 ? (r[i] ?? "").trim() : ""; };
   if (!head.includes("name") || !head.includes("price")) return { error: "The header row needs at least name and price columns" };
@@ -102,12 +103,16 @@ export async function importProducts(_: FormState, form: FormData): Promise<Form
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     if (r.every((c) => !c.trim())) continue;
-    const name = col(r, "name");
+    const name = col(r, "name").slice(0, 120);
     const price = parseGBP(col(r, "price"));
-    if (!name || price == null) { errors.push(`Row ${i + 1}: needs a name and price`); continue; }
+    if (!name || price == null || price < 0) { errors.push(`Row ${i + 1}: needs a name and a price that isn't negative`); continue; }
+    const cost = col(r, "cost") ? parseGBP(col(r, "cost")) : null;
+    if (cost != null && cost < 0) { errors.push(`Row ${i + 1}: cost can't be negative`); continue; }
+    const minAge = parseInt(col(r, "min_age"), 10) || null;
+    if (minAge && ![16, 18, 21].includes(minAge)) { errors.push(`Row ${i + 1}: minimum age must be 16, 18 or 21`); continue; }
     const barcode = col(r, "barcode");
     const sku = col(r, "sku") || null;
-    const catName = col(r, "category");
+    const catName = col(r, "category").slice(0, 60);
     let categoryId: string | null = null;
     if (catName) {
       categoryId = cats.get(catName.toLowerCase()) ?? null;
@@ -117,8 +122,8 @@ export async function importProducts(_: FormState, form: FormData): Promise<Form
       name, pricePence: price, vatCode: vatMap[col(r, "vat").toLowerCase()] ?? "STANDARD",
       unit: (/kg/i.test(col(r, "unit")) ? "PER_KG" : "EACH") as "PER_KG" | "EACH",
       sku, plu: col(r, "plu") || null, categoryId,
-      costPence: col(r, "cost") ? parseGBP(col(r, "cost")) : null,
-      minAge: parseInt(col(r, "min_age"), 10) || null,
+      costPence: cost,
+      minAge,
       reorderLevel: parseInt(col(r, "reorder_level"), 10) || null,
     };
     try {

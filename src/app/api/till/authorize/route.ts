@@ -12,13 +12,15 @@ import { APPROVAL_MAX_AGE, sign } from "@/lib/session";
 export const POST = apiRoute("POST /api/till/authorize", async (req: Request) => {
   const ctx = await tillContext({ requireActive: true });
   if (!ctx) return fail("Sign in at the till first", 401);
-  const key = `override:${ctx.device.registerId}`;
-  if (await isLimited(key, 5, 5)) return fail("Too many wrong PINs. Wait a few minutes and try again.", 429);
+  // 5 wrong PINs per till in 5 minutes, and 20 an hour across the business, so a cashier can't work through
+  // every 4-digit PIN by moving between tills.
+  const keys = [`override:${ctx.device.registerId}`, `overrideorg:${ctx.device.orgId}`];
+  if ((await isLimited(keys[0], 5, 5)) || (await isLimited(keys[1], 20, 60))) return fail("Too many wrong PINs. Wait a few minutes and try again.", 429);
   const { pin, action, detail, saleId } = await req.json().catch(() => ({}));
   const act = String(action ?? "").slice(0, 30);
   const approver = await authorizeOverride(ctx.device.orgId, String(pin ?? ""), act === "refund" ? "MANAGER" : "SUPERVISOR");
   if (!approver) {
-    await recordAttempt([key], false);
+    await recordAttempt(keys, false);
     return fail("That PIN can't approve this", 403);
   }
   await audit(ctx.device.orgId, approver.id, `override.${act}`, { cashierId: ctx.user.id, saleId: typeof saleId === "string" ? saleId.slice(0, 40) : null, detail: typeof detail === "string" ? detail.slice(0, 200) : null });

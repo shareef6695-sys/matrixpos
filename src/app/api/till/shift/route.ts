@@ -1,6 +1,11 @@
 import { db } from "@/lib/server/db";
 import { postCashMovement, postShiftClose } from "@/lib/server/accounting";
 import { tillContext, shiftSummary, nextCounter, json, fail, audit } from "@/lib/server/till";
+import { useOnce } from "@/lib/server/revocation";
+import { APPROVAL_MAX_AGE, atLeast, verify, type ApprovalProof } from "@/lib/session";
+
+/** The most one cash movement can be: £10,000. A typo or a made-up amount can't wipe out a day's takings in one go. */
+const MAX_CASH_MOVE = 1_000_000;
 import { apiRoute } from "@/lib/server/errors";
 
 /** Current shift summary (X report). */
@@ -33,6 +38,16 @@ export const POST = apiRoute("POST /api/till/shift", async (req: Request) => {
   if (body.action === "cash") {
     const amount = Math.trunc(Number(body.amountPence) || 0);
     if (!amount) return fail("Enter an amount");
+    if (Math.abs(amount) > MAX_CASH_MOVE) return fail("That's more than one cash movement can be. Split it, or ask a manager.");
+    // Cash leaving the drawer hides money from the Z report, so a cashier needs a supervisor's approval for it.
+    // The approval is signed for this one movement on this till, and can only be used once.
+    if (amount < 0 && !atLeast(ctx.user.role, "SUPERVISOR")) {
+      const moveId = String(body.moveId ?? "");
+      const a = await verify<ApprovalProof>(typeof body.approval === "string" ? body.approval : undefined, "approval");
+      if (!a || a.action !== "paidout" || a.orgId !== ctx.device.orgId || a.registerId !== ctx.device.registerId || a.saleId !== moveId || !atLeast(a.approverRole, "SUPERVISOR"))
+        return fail("Cash out needs a supervisor or manager's approval", 403);
+      if (!(await useOnce(`paidout:${moveId}`, new Date(Date.now() + APPROVAL_MAX_AGE * 1000)))) return fail("That approval was already used", 403);
+    }
     const reason = String(body.reason ?? "").slice(0, 120) || (amount > 0 ? "Paid in" : "Paid out");
     const mv = await db.cashMovement.create({ data: { shiftId: open.id, amountPence: amount, reason, userId: ctx.user.id } });
     await postCashMovement(db, ctx.device.orgId, mv.id, amount, `Till cash: ${reason}`, ctx.user.id);

@@ -87,7 +87,8 @@ export const saleSchema = z.object({
   lines: z.array(z.object({
     productId: z.string().nullish(),
     name: z.string().max(200),
-    quantity: z.number().int(),
+    // At most 9,999 of an item, or 1,000 kg of a weighed item (grams), on one line.
+    quantity: z.number().int().min(-1_000_000).max(1_000_000),
     unit: z.enum(["EACH", "PER_KG"]),
     unitPricePence: z.number().int(),
     grossPence: z.number().int(),
@@ -168,14 +169,14 @@ export async function recordSale(orgId: string, storeId: string, registerId: str
     original = { lines: o.lines, refunded: earlier };
   }
 
+  const checkCtx = {
+    pricing: await pricingFor(orgId, s.pricingId),
+    canDiscount: atLeast(role, "SUPERVISOR") || approved.has("discount"),
+    canRefund: !(settings?.requireManagerForRefund && role === "CASHIER") || approved.has("refund"),
+  };
   let checked;
   try {
-    checked = checkSale(s, {
-      pricing: await pricingFor(orgId, s.pricingId),
-      original,
-      canDiscount: atLeast(role, "SUPERVISOR") || approved.has("discount"),
-      canRefund: !(settings?.requireManagerForRefund && role === "CASHIER") || approved.has("refund"),
-    });
+    checked = checkSale(s, { ...checkCtx, original });
   } catch (e) {
     if (e instanceof SaleCheckError) {
       // Logged once per sale (the till retries), so a manager can see refused sales in the audit log.
@@ -209,6 +210,18 @@ export async function recordSale(orgId: string, storeId: string, registerId: str
   const known = new Map(products.map((p) => [p.id, p]));
 
   return db.$transaction(async (tx) => {
+    if (s.kind === "REFUND" && original) {
+      // Two refunds of the same receipt sent at the same moment could each pass the check above and together pay
+      // back more than was bought. Lock the original sale and check again against the refunds saved so far.
+      await tx.$queryRaw`SELECT id FROM "Sale" WHERE id = ${s.originalSaleId!} FOR UPDATE`;
+      const refunded = await tx.saleLine.findMany({ where: { sale: { originalSaleId: s.originalSaleId!, organizationId: orgId, status: "COMPLETED" } } });
+      try {
+        checkSale(s, { ...checkCtx, original: { lines: original.lines, refunded } });
+      } catch (e) {
+        if (e instanceof SaleCheckError) throw new UserError(e.message);
+        throw e;
+      }
+    }
     await tx.sale.create({
       data: {
         id: s.id, organizationId: orgId, storeId, registerId, userId: s.userId,

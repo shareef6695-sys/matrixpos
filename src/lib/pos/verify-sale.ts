@@ -89,6 +89,7 @@ function checkSaleLines(s: ClaimedSale, ctx: CheckContext) {
   const cart: CartLine[] = [];
   s.lines.forEach((l, i) => {
     if (!(l.quantity > 0)) no("Sale lines must have a positive quantity");
+    if (l.unit === "EACH" && l.quantity > 9_999) no("A sale line can't be more than 9,999 items");
     if (l.productId) {
       const p = products[l.productId] ?? no("A product on this sale isn't in the shop's price list");
       if (l.unit !== p.unit) no(`${p.name}: wrong unit`);
