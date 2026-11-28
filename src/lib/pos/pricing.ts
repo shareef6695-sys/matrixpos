@@ -101,8 +101,14 @@ export function priceBasket<T extends CartLine>(cart: T[], promotions: Promotion
   });
 
   const applied: AppliedPromotion[] = [];
+  // Offers saved with nonsense numbers (zero or negative quantities) are skipped: the loops below would never end.
+  const sane = (p: PromotionRule) =>
+    (p.quantity == null || (Number.isInteger(p.quantity) && p.quantity >= 1 && p.quantity <= 1000)) &&
+    (p.freeQuantity == null || (Number.isInteger(p.freeQuantity) && p.freeQuantity >= 1 && p.freeQuantity <= 1000)) &&
+    (p.pricePence == null || p.pricePence >= 0) &&
+    (p.percentOff == null || (p.percentOff >= 0 && p.percentOff <= 100));
   const live = promotions
-    .filter((p) => isLive(p, now))
+    .filter((p) => isLive(p, now) && sane(p))
     .sort((a, b) => PROMO_ORDER.indexOf(a.type) - PROMO_ORDER.indexOf(b.type));
 
   const credit = (group: Unit[], saving: number, promo: PromotionRule) => {

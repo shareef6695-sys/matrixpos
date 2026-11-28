@@ -61,6 +61,10 @@ export async function sendEmail(e: Email): Promise<boolean> {
 /** The site's own address, for links in emails. */
 export async function appUrl() {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  // On the live site, never build email links from the request's Host headers: a forged header would put
+  // someone else's domain in a password reset link. Use the production domain Vercel gives us instead.
+  const live = process.env.VERCEL_ENV ? process.env.VERCEL_ENV === "production" : process.env.NODE_ENV === "production";
+  if (live && process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");

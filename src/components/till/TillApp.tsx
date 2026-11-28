@@ -520,7 +520,7 @@ function Selling({ boot, online, pending, setPending, notify, reload }: {
       )}
 
       {overlay?.kind === "cash" && (
-        <CashMoveModal direction={overlay.direction} onClose={() => setOverlay(null)} onDone={() => { setOverlay(null); notify("Recorded"); }} />
+        <CashMoveModal direction={overlay.direction} needsApproval={overlay.direction < 0 && user.role === "CASHIER"} onClose={() => setOverlay(null)} onDone={() => { setOverlay(null); notify("Recorded"); }} />
       )}
 
       {overlay?.kind === "report" && (
@@ -751,17 +751,38 @@ function RefundModal({ onClose, onPick }: { onClose: () => void; onPick: (sale: 
   );
 }
 
-function CashMoveModal({ direction, onClose, onDone }: { direction: 1 | -1; onClose: () => void; onDone: () => void }) {
+function CashMoveModal({ direction, needsApproval, onClose, onDone }: { direction: 1 | -1; needsApproval: boolean; onClose: () => void; onDone: () => void }) {
   const [v, setV] = useState("");
   const [reason, setReason] = useState(direction > 0 ? "Float top-up" : "Safe drop");
   const [err, setErr] = useState("");
+  // Cash leaving the drawer needs a supervisor's PIN when a cashier is signed in. The approval is for this one movement.
+  const [moveId] = useState(() => crypto.randomUUID());
+  const [pinStep, setPinStep] = useState(false);
+  const [pin, setPin] = useState("");
   const pence = v ? parseGBP(v.includes(".") ? v : (parseInt(v, 10) / 100).toFixed(2)) ?? 0 : 0;
+  const record = async (approval?: string | null) => {
+    const r = await post("/api/till/shift", { action: "cash", amountPence: direction * pence, reason, moveId, approval }).catch(() => ({ ok: false, body: { error: "Needs a connection" } }));
+    if (r.ok) onDone(); else setErr(r.body.error);
+  };
+  const approve = async () => {
+    const r = await post("/api/till/authorize", { pin, action: "paidout", saleId: moveId, detail: `${formatGBP(pence)} ${reason}` }).catch(() => ({ ok: false, body: { error: "Needs a connection" } }));
+    setPin("");
+    if (r.ok) await record(r.body.token); else { setErr(r.body.error); beep(false); }
+  };
+  if (pinStep) return (
+    <Modal title={`Approve cash out of ${formatGBP(pence)}`} onClose={onClose}>
+      <p className="mb-2 text-center text-sm text-slate-500">A supervisor or manager enters their PIN</p>
+      <Keypad value={pin} onChange={setPin} mask maxLength={6} onEnter={approve} enterLabel="Approve" />
+      {err && <p className="mt-2 text-center text-sm text-red-600">{err}</p>}
+    </Modal>
+  );
   return (
     <Modal title={direction > 0 ? "Cash in" : "Cash out / safe drop"} onClose={onClose}>
       <input className="input mb-3" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason" />
       <Keypad value={v} onChange={setV} decimal maxLength={8} enterLabel={`Record ${formatGBP(pence)}`} onEnter={async () => {
-        const r = await post("/api/till/shift", { action: "cash", amountPence: direction * pence, reason }).catch(() => ({ ok: false, body: { error: "Needs a connection" } }));
-        if (r.ok) onDone(); else setErr(r.body.error);
+        if (!pence) return;
+        if (needsApproval) { setErr(""); setPinStep(true); return; }
+        await record();
       }} />
       {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
     </Modal>

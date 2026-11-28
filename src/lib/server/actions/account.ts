@@ -145,7 +145,8 @@ export async function requestClosure(_: FormState, f: FormData): Promise<FormSta
   if (await isLimited(`pwcheck:${user.id}`, 5, 15)) return { error: PW_LIMIT };
   if (!user.passwordHash || !(await compare(String(f.get("password") ?? ""), user.passwordHash))) { await recordAttempt([`pwcheck:${user.id}`], false); return { error: "Password isn't right" }; }
   await cancelCardSubscription(org.id);
-  await db.organization.update({ where: { id: org.id }, data: { closureRequestedAt: new Date(), billingStatus: "CANCELLED" } });
+  // A suspended account stays suspended, so closing and re-opening it can't be used to lift a suspension.
+  await db.organization.update({ where: { id: org.id }, data: { closureRequestedAt: new Date(), billingStatus: org.billingStatus === "SUSPENDED" ? "SUSPENDED" : "CANCELLED" } });
   await audit(org.id, user.id, "account.close.request");
   const when = new Date(Date.now() + CLOSURE_DAYS * 86_400_000).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });
   if (user.email) await sendEmail({ to: user.email, subject: "Your MatrixPOS account is closing", text: `Hi ${user.name},\n\nWe've closed ${org.name}. Your tills and back office are now switched off. All your data will be permanently deleted on ${when}.\n\nChanged your mind? Sign in before then and choose "Keep my account" on the Plan & billing page. Download your data from the same page if you need a copy.` });
@@ -156,8 +157,10 @@ export async function requestClosure(_: FormState, f: FormData): Promise<FormSta
 export async function cancelClosure() {
   const s = await requireAdmin("OWNER", { allowLocked: true });
   const org = await db.organization.findUniqueOrThrow({ where: { id: s.orgId } });
+  // Only undoes a closure. Without this check an owner could press it to turn a suspended or unpaid account back on.
+  if (!org.closureRequestedAt) return;
   const now = Date.now();
-  const status = org.paidUntil && org.paidUntil.getTime() > now ? "ACTIVE" : "TRIAL";
+  const status = org.billingStatus === "SUSPENDED" ? "SUSPENDED" : org.paidUntil && org.paidUntil.getTime() > now ? "ACTIVE" : "TRIAL";
   await db.organization.update({ where: { id: s.orgId }, data: { closureRequestedAt: null, billingStatus: status } });
   await audit(s.orgId, s.userId, "account.close.cancel");
   revalidatePath("/admin", "layout");

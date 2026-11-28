@@ -13,6 +13,7 @@ import { openSecret } from "@/lib/server/secret-box";
 import { revoke, useOnce } from "@/lib/server/revocation";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { LEGAL } from "@/lib/legal";
+import { showDemoLogin } from "@/lib/server/demo";
 import {
   ADMIN_COOKIE, ADMIN_MAX_AGE, DEVICE_COOKIE, TILL_COOKIE, MFA_COOKIE, MFA_MAX_AGE, sign, verify, type AdminToken, type MfaSession,
 } from "@/lib/session";
@@ -37,6 +38,12 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
   if (await overLimit(`login:${ip}`, 5, 1)) return { error: TOO_FAST };
   if ((await isLimited(keys[0], 5, 15)) || (await isLimited(keys[1], 30, 15))) return { error: TOO_MANY };
 
+  // The demo logins have a password published in this public repository. On the live site they only work
+  // when the demo is switched on deliberately (SHOW_DEMO_LOGIN=true), even if the demo shop was seeded there.
+  if (email.endsWith("@demo.matrixpos.uk") && !showDemoLogin()) {
+    await recordAttempt(keys, false);
+    return { error: "Email or password is incorrect." };
+  }
   const user = await db.user.findUnique({ where: { email } });
   if (!user?.passwordHash || !user.active || !(await compare(password, user.passwordHash))) {
     await recordAttempt(keys, false);
@@ -107,7 +114,9 @@ export async function signup(_: FormState, form: FormData): Promise<FormState> {
   const pwProblem = passwordProblem(d.password);
   if (pwProblem) return { error: pwProblem };
   const ip = await clientIp();
-  if ((await overLimit(`signup-try:${ip}`, 5, 1)) || (await isLimited(`signup:${ip}`, 10, 60))) return { error: "Too many sign-ups from this connection. Please try again later." };
+  // At most 10 new businesses an hour and 20 a day from one connection, so free trials can't be mass-created.
+  if ((await overLimit(`signup-try:${ip}`, 5, 1)) || (await isLimited(`signup:${ip}`, 10, 60)) || (await isLimited(`signup:${ip}`, 20, 24 * 60))) return { error: "Too many sign-ups from this connection. Please try again later." };
+  if (d.email.endsWith("@demo.matrixpos.uk")) return { error: "Enter a valid email" };
   if (await db.user.findUnique({ where: { email: d.email } })) return { error: "An account with that email already exists. Try signing in or resetting your password." };
 
   const base = d.business.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "shop";

@@ -37,7 +37,7 @@ export async function adjustStock(_: FormState, f: FormData): Promise<FormState>
   ]);
   if (!product || !store) return { error: "Choose a product and store" };
   const raw = parseFloat(str(f, "quantity"));
-  if (Number.isNaN(raw)) return { error: "Enter a quantity" };
+  if (!Number.isFinite(raw) || Math.abs(raw) > 1_000_000) return { error: "Enter a quantity" };
   const qty = product.unit === "PER_KG" ? Math.round(raw * 1000) : Math.round(raw);
   const current = (await db.stockLevel.findUnique({ where: { storeId_productId: { storeId, productId } } }))?.quantity ?? 0;
 
@@ -88,6 +88,12 @@ export async function savePromotion(_: FormState, f: FormData): Promise<FormStat
     startsAt: str(f, "startsAt") ? new Date(str(f, "startsAt")) : null,
     endsAt: str(f, "endsAt") ? new Date(str(f, "endsAt") + "T23:59:59") : null,
   };
+  if (!["MULTIBUY_PRICE", "BUY_X_GET_Y", "PERCENT_OFF", "MEAL_DEAL"].includes(type)) return { error: "Choose an offer type" };
+  // Negative or huge numbers would make the offer maths loop forever on the tills and the server.
+  if ((data.quantity != null && !(data.quantity >= 1 && data.quantity <= 100)) || (data.freeQuantity != null && !(data.freeQuantity >= 1 && data.freeQuantity <= 100)))
+    return { error: "Quantities must be between 1 and 100" };
+  if (data.pricePence != null && !(data.pricePence >= 0)) return { error: "The offer price can't be negative" };
+  if ((data.startsAt && isNaN(data.startsAt.getTime())) || (data.endsAt && isNaN(data.endsAt.getTime()))) return { error: "Enter valid dates" };
   if (type === "MULTIBUY_PRICE" && (!data.quantity || data.quantity < 2 || data.pricePence == null)) return { error: "Multibuy needs a quantity (2 or more) and a price" };
   if (type === "BUY_X_GET_Y" && (!data.quantity || !data.freeQuantity)) return { error: "Enter how many to buy and how many are free" };
   if (type === "PERCENT_OFF" && (!data.percentOff || data.percentOff < 1 || data.percentOff > 100)) return { error: "Enter a percentage between 1 and 100" };
@@ -157,13 +163,16 @@ export async function updatePurchaseOrder(f: FormData) {
   if (action === "addLine") {
     const productId = str(f, "productId");
     const product = await db.product.findFirst({ where: { id: productId, organizationId: s.orgId } });
-    if (product) await db.purchaseOrderLine.create({ data: { purchaseOrderId: id, productId, quantity: Math.max(1, parseInt(str(f, "quantity"), 10) || 1), costPence: product.costPence } });
+    if (product) await db.purchaseOrderLine.create({ data: { purchaseOrderId: id, productId, quantity: Math.min(100_000, Math.max(1, parseInt(str(f, "quantity"), 10) || 1)), costPence: product.costPence } });
   } else if (action === "save" || action === "send") {
     for (const l of po.lines) {
       const q = parseInt(str(f, `qty_${l.id}`), 10);
       if (Number.isNaN(q)) continue;
       if (q <= 0) await db.purchaseOrderLine.delete({ where: { id: l.id } });
-      else await db.purchaseOrderLine.update({ where: { id: l.id }, data: { quantity: q, costPence: str(f, `cost_${l.id}`) ? parseGBP(str(f, `cost_${l.id}`)) : l.costPence } });
+      else {
+        const cost = str(f, `cost_${l.id}`) ? parseGBP(str(f, `cost_${l.id}`)) : l.costPence;
+        await db.purchaseOrderLine.update({ where: { id: l.id }, data: { quantity: Math.min(q, 100_000), costPence: cost != null && cost >= 0 ? cost : l.costPence } });
+      }
     }
     await db.purchaseOrder.update({ where: { id }, data: { notes: optional(f, "notes"), ...(action === "send" ? { status: "SENT" } : {}) } });
   } else if (action === "receive") {
@@ -306,10 +315,14 @@ export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
     if (u.id === s.userId && role !== u.role) return { error: "You can't change your own role" };
     // Your own password is changed under My account, which asks for the current one.
     if (u.id === s.userId && password) return { error: "Change your own password under My account" };
+    const emailChanged = email !== u.email;
     await db.$transaction([
+      // Links already sent (confirm email, reset password) went to the old address. They must not confirm the new one,
+      // or anyone could change their email to someone else's (e.g. an HQ address) and "confirm" it with their own old link.
+      ...(emailChanged ? [db.authToken.deleteMany({ where: { userId: id } })] : []),
       // A new email address has to be confirmed again.
       // A new password signs them out on other devices; a new email address has to be confirmed again.
-      db.user.update({ where: { id }, data: { ...data, ...(password ? { sessionVersion: { increment: 1 } } : {}), ...(email !== u.email ? { emailVerifiedAt: null } : {}) } }),
+      db.user.update({ where: { id }, data: { ...data, ...(password ? { sessionVersion: { increment: 1 } } : {}), ...(emailChanged ? { emailVerifiedAt: null } : {}) } }),
       db.userStore.deleteMany({ where: { userId: id } }),
       db.userStore.createMany({ data: validStores.map((v) => ({ userId: id, storeId: v.id })) }),
     ]);
