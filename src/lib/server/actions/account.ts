@@ -3,13 +3,14 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/server/db";
-import { compare, hash, getAdmin, requireAdmin } from "@/lib/server/auth";
+import { compare, hash, getAdmin, passwordProblem, requireAdmin } from "@/lib/server/auth";
 import { audit } from "@/lib/server/till";
 import { consumeToken } from "@/lib/server/tokens";
 import { CLOSURE_DAYS, cancelCardSubscription, deleteOrganization, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/server/account";
 import { sendEmail } from "@/lib/server/email";
-import { clientIp, isLimited, recordAttempt } from "@/lib/server/ratelimit";
+import { clearAttempts, clientIp, isLimited, recordAttempt } from "@/lib/server/ratelimit";
 import { newSecret, verifyTotp } from "@/lib/server/totp";
+import { openSecret, sealSecret } from "@/lib/server/secret-box";
 import { requirePlatformAdmin } from "@/lib/server/billing";
 import { ADMIN_COOKIE } from "@/lib/session";
 import { LEGAL } from "@/lib/legal";
@@ -47,14 +48,15 @@ export async function forgotPassword(_: FormState, f: FormData): Promise<FormSta
 
 export async function resetPassword(_: FormState, f: FormData): Promise<FormState> {
   const password = String(f.get("password") ?? "");
-  if (password.length < 8) return { error: "Password must be at least 8 characters" };
+  const problem = passwordProblem(password);
+  if (problem) return { error: problem };
   if (password !== String(f.get("confirm") ?? "")) return { error: "The two passwords don't match" };
   const userId = await consumeToken(String(f.get("token") ?? ""), "RESET_PASSWORD");
   if (!userId) return { error: "This link has expired or was already used. Please ask for a new one." };
   // Opening the link proves they own the email address.
   // Bumping sessionVersion signs this person out on every device.
   const user = await db.user.update({ where: { id: userId }, data: { passwordHash: await hash(password), emailVerifiedAt: new Date(), sessionVersion: { increment: 1 } } });
-  await db.loginAttempt.deleteMany({ where: { key: `email:${user.email}` } });
+  if (user.email) await clearAttempts([`email:${user.email}`]);
   await audit(user.organizationId, user.id, "password.reset");
   if (user.email) await sendEmail({ to: user.email, subject: "Your MatrixPOS password was changed", text: `Hi ${user.name},\n\nYour MatrixPOS password was just changed. If this wasn't you, reset it straight away and contact us.` });
   (await cookies()).delete(ADMIN_COOKIE);
@@ -68,7 +70,8 @@ export async function changePassword(_: FormState, f: FormData): Promise<FormSta
   const current = String(f.get("current") ?? "");
   const password = String(f.get("password") ?? "");
   if (!user.passwordHash || !(await compare(current, user.passwordHash))) return { error: "Your current password isn't right" };
-  if (password.length < 8) return { error: "New password must be at least 8 characters" };
+  const problem = passwordProblem(password);
+  if (problem) return { error: `New ${problem.toLowerCase()}` };
   if (password !== String(f.get("confirm") ?? "")) return { error: "The two new passwords don't match" };
   // Signs out every other device, and keeps this one signed in with a fresh session.
   const updated = await db.user.update({ where: { id: user.id }, data: { passwordHash: await hash(password), sessionVersion: { increment: 1 } } });
@@ -84,7 +87,7 @@ export async function startTotp(): Promise<FormState & { secret?: string }> {
   const me = await db.user.findUniqueOrThrow({ where: { id: s.userId }, select: { email: true } });
   if (isDemo(me.email)) return { error: DEMO };
   const secret = newSecret();
-  await db.user.update({ where: { id: s.userId }, data: { totpSecret: secret, totpEnabledAt: null } });
+  await db.user.update({ where: { id: s.userId }, data: { totpSecret: sealSecret(secret), totpEnabledAt: null } });
   revalidatePath("/admin/account");
   return { secret };
 }
@@ -94,7 +97,7 @@ export async function enableTotp(_: FormState, f: FormData): Promise<FormState> 
   const user = await db.user.findUniqueOrThrow({ where: { id: s.userId } });
   if (isDemo(user.email)) return { error: DEMO };
   if (!user.totpSecret) return { error: "Start again" };
-  if (!verifyTotp(user.totpSecret, String(f.get("code") ?? ""))) return { error: "That code isn't right. Check the time on your phone is set automatically." };
+  if (!verifyTotp(openSecret(user.totpSecret)!, String(f.get("code") ?? ""))) return { error: "That code isn't right. Check the time on your phone is set automatically." };
   await db.user.update({ where: { id: s.userId }, data: { totpEnabledAt: new Date() } });
   await audit(s.orgId, s.userId, "mfa.enable");
   revalidatePath("/admin/account");
@@ -168,6 +171,6 @@ export async function platformResetMfa(f: FormData) {
   const admin = await requirePlatformAdmin();
   const userId = String(f.get("userId") ?? "");
   const user = await db.user.update({ where: { id: userId }, data: { totpSecret: null, totpEnabledAt: null } });
-  await audit(user.organizationId, null, "platform.mfa.reset", { by: admin.name, user: user.name });
+  await audit(user.organizationId, null, "platform.mfa.reset", { by: admin.name, userId: user.id });
   revalidatePath(`/platform/${user.organizationId}`);
 }

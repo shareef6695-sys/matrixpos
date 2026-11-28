@@ -14,9 +14,15 @@ export async function queued(): Promise<QueuedSale[]> {
   return (await get<QueuedSale[]>(QUEUE).catch(() => undefined)) ?? [];
 }
 
+/**
+ * Queues a sale until the server has it. Display-only fields (cashier and loyalty customer names, offer names)
+ * are left out, so the browser's storage never holds a shopper's name. The receipt on screen uses the in-memory copy.
+ */
 export async function enqueue(sale: QueuedSale) {
+  const { _cashier, _promotions, _customer, ...stored } = sale;
+  void _cashier; void _promotions; void _customer;
   const q = await queued();
-  q.push(sale);
+  q.push(stored);
   await set(QUEUE, q);
 }
 

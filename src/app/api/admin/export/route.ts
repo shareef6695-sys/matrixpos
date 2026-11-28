@@ -28,5 +28,5 @@ export async function GET(req: Request) {
     name = `sales-${from}-to-${to}.csv`;
   } else return new Response("Unknown export", { status: 400 });
 
-  return new Response("﻿" + body, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${name}"` } });
+  return new Response("﻿" + body, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "no-store" } });
 }

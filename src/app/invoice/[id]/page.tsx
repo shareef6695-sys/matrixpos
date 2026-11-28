@@ -17,7 +17,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const inv = await db.subscriptionInvoice.findUnique({ where: { id } });
   const platform = await isPlatformAdmin();
   if (!inv || (inv.organizationId !== s.orgId && !platform)) notFound();
-  const back = platform && inv.organizationId !== s.orgId ? `/platform/${inv.organizationId}` : "/admin/billing";
+  const back = platform && inv.organizationId !== s.orgId ? (inv.organizationId ? `/platform/${inv.organizationId}` : "/platform") : "/admin/billing";
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-6 print:bg-white print:p-0">
       <div className="mx-auto mb-4 flex max-w-3xl flex-wrap items-center justify-between gap-2 print:hidden">

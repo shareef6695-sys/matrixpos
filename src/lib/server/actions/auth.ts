@@ -4,11 +4,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { ensureChart } from "@/lib/server/accounting";
-import { compare, hash, cookieOpts } from "@/lib/server/auth";
+import { compare, hash, hashPin, cookieOpts, passwordProblem } from "@/lib/server/auth";
 import { applyPlanToSettings } from "@/lib/server/billing";
 import { sendVerificationEmail } from "@/lib/server/account";
 import { clientIp, isLimited, recordAttempt } from "@/lib/server/ratelimit";
 import { verifyTotp } from "@/lib/server/totp";
+import { openSecret } from "@/lib/server/secret-box";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { LEGAL } from "@/lib/legal";
 import {
@@ -21,7 +22,7 @@ const safeNext = (n: string) => (n.startsWith("/") && !n.startsWith("//") ? n : 
 const TOO_MANY = "Too many sign-in attempts. Please wait 15 minutes, or reset your password.";
 
 export async function startSession(user: { id: string; organizationId: string; role: "OWNER" | "MANAGER" | "SUPERVISOR" | "CASHIER"; name: string; sessionVersion: number }) {
-  const token = await sign({ kind: "admin", userId: user.id, orgId: user.organizationId, role: user.role, name: user.name, v: user.sessionVersion }, ADMIN_MAX_AGE);
+  const token = await sign({ kind: "admin", userId: user.id, orgId: user.organizationId, role: user.role, v: user.sessionVersion }, ADMIN_MAX_AGE);
   (await cookies()).set(ADMIN_COOKIE, token, cookieOpts(ADMIN_MAX_AGE));
 }
 
@@ -60,7 +61,7 @@ export async function verifyLoginCode(_: FormState, form: FormData): Promise<For
   if (await isLimited(key, 5, 15)) return { error: TOO_MANY };
   const user = await db.user.findUnique({ where: { id: pending.userId } });
   if (!user?.active || !user.totpSecret) return { error: "Please sign in again." };
-  if (!verifyTotp(user.totpSecret, String(form.get("code") ?? ""))) {
+  if (!verifyTotp(openSecret(user.totpSecret)!, String(form.get("code") ?? ""))) {
     await recordAttempt([key], false);
     return { error: "That code isn't right. Check your authenticator app and try again." };
   }
@@ -92,6 +93,8 @@ export async function signup(_: FormState, form: FormData): Promise<FormState> {
   const parsed = signupSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const d = parsed.data;
+  const pwProblem = passwordProblem(d.password);
+  if (pwProblem) return { error: pwProblem };
   const ip = await clientIp();
   if (await isLimited(`signup:${ip}`, 10, 60)) return { error: "Too many sign-ups from this connection. Please try again later." };
   if (await db.user.findUnique({ where: { email: d.email } })) return { error: "An account with that email already exists. Try signing in or resetting your password." };
@@ -119,7 +122,7 @@ export async function signup(_: FormState, form: FormData): Promise<FormState> {
   const user = await db.user.create({
     data: {
       organizationId: org.id, name: d.name, email: d.email, role: "OWNER",
-      passwordHash: await hash(d.password), pinHash: await hash(d.pin),
+      passwordHash: await hash(d.password), pinHash: await hashPin(d.pin),
       stores: { create: { storeId: org.stores[0].id } },
     },
   });

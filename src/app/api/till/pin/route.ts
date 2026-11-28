@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     await recordAttempt(keys, false);
     return fail("PIN not recognised", 401);
   }
-  const token = await sign({ kind: "till", userId: user.id, orgId: user.organizationId, registerId: ctx.register.id, role: user.role, name: user.name }, TILL_MAX_AGE);
+  const token = await sign({ kind: "till", userId: user.id, orgId: user.organizationId, registerId: ctx.register.id, role: user.role }, TILL_MAX_AGE);
   (await cookies()).set(TILL_COOKIE, token, cookieOpts(TILL_MAX_AGE));
   await audit(user.organizationId, user.id, "till.signin", { register: ctx.register.name });
   return json({ user: { id: user.id, name: user.name, role: user.role } });

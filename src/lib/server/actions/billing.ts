@@ -21,7 +21,7 @@ export async function requestPlan(_: FormState, f: FormData): Promise<FormState>
   const plan = String(f.get("plan") ?? "");
   const cycle = f.get("cycle") === "YEARLY" ? "YEARLY" : "MONTHLY";
   if (!PLAN_IDS.includes(plan)) return { error: "Choose a plan" };
-  await audit(s.orgId, s.userId, "billing.request", { plan, cycle, by: s.name });
+  await audit(s.orgId, s.userId, "billing.request", { plan, cycle });
   revalidatePath("/admin/billing");
   return { ok: `Thanks. We'll email you an invoice for ${planById(plan).name} (${cycle.toLowerCase()}) and switch your plan.` };
 }

@@ -1,6 +1,8 @@
 import "server-only";
 import { db } from "./db";
+import { randomBytes } from "node:crypto";
 import { createToken } from "./tokens";
+import { hashPin } from "./auth";
 import { appUrl, sendEmail } from "./email";
 import { stripe, stripeBillingEnabled } from "./stripe-billing";
 import { safeError } from "@/lib/server/redact";
@@ -37,10 +39,16 @@ export async function sendPasswordResetEmail(user: { id: string; name: string; e
   });
 }
 
-/** Permanently deletes a business and everything in it. */
+/**
+ * Permanently deletes a business and everything in it: stores, staff, customers, sales, accounts and logs.
+ * (We are the shop's processor, so its data goes at the end of the service, as the DPA says. Shops keep
+ * their own 6-year VAT records by downloading their data first.) MatrixPOS's own subscription invoices to
+ * the business are our tax records: they are kept, unlinked from the business and without the email address.
+ */
 export async function deleteOrganization(orgId: string) {
   await cancelCardSubscription(orgId);
   await db.$transaction(async (tx) => {
+    await tx.subscriptionInvoice.updateMany({ where: { organizationId: orgId }, data: { billToEmail: null } });
     await tx.journalEntry.deleteMany({ where: { organizationId: orgId } });
     await tx.sale.deleteMany({ where: { organizationId: orgId } });
     await tx.purchaseOrder.deleteMany({ where: { organizationId: orgId } });
@@ -57,5 +65,47 @@ export async function dailyCleanup() {
   const day = new Date(Date.now() - 86_400_000);
   const attempts = await db.loginAttempt.deleteMany({ where: { createdAt: { lt: day } } });
   const tokens = await db.authToken.deleteMany({ where: { OR: [{ expiresAt: { lt: day } }, { usedAt: { lt: day } }] } });
-  return { deletedBusinesses: due.map((o) => o.name), loginAttempts: attempts.count, tokens: tokens.count };
+  // Invoices of deleted businesses are kept for 6 years after the end of the financial year, so at most 7 years.
+  const invoiceCutoff = new Date(Date.now() - INVOICE_RETENTION_YEARS * 365.25 * 86_400_000);
+  const invoices = await db.subscriptionInvoice.deleteMany({ where: { organizationId: null, issuedAt: { lt: invoiceCutoff } } });
+  return { deletedBusinesses: due.length, loginAttempts: attempts.count, tokens: tokens.count, expiredInvoices: invoices.count };
+}
+
+export const INVOICE_RETENTION_YEARS = 7;
+export const ERASED_STAFF_NAME = "Former staff member";
+
+/**
+ * UK GDPR right to erasure for a staff member. Their sales, shifts and audit entries stay (the shop needs them
+ * for its VAT and till records), but everything that identifies them is removed: name, email, password,
+ * PIN, two-step secret, sign-in links and store links, and their name inside audit log details.
+ * They are switched off and signed out everywhere.
+ */
+export async function eraseStaffMember(orgId: string, userId: string) {
+  const user = await db.user.findFirst({ where: { id: userId, organizationId: orgId }, select: { id: true, name: true, email: true } });
+  if (!user) return false;
+  const unusablePin = await hashPin(randomBytes(32).toString("hex"));
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        name: ERASED_STAFF_NAME, email: null, passwordHash: null, pinHash: unusablePin, totpSecret: null, totpEnabledAt: null,
+        emailVerifiedAt: null, active: false, sessionVersion: { increment: 1 },
+      },
+    });
+    await tx.authToken.deleteMany({ where: { userId: user.id } });
+    await tx.userStore.deleteMany({ where: { userId: user.id } });
+    // Older audit entries stored names inside their details; replace this person's name and email there.
+    const needles = [user.name, user.email].filter((x): x is string => !!x && x.length >= 2);
+    if (needles.length) {
+      const logs = await tx.auditLog.findMany({ where: { organizationId: orgId }, select: { id: true, detail: true } });
+      for (const l of logs) {
+        if (l.detail == null) continue;
+        const text = JSON.stringify(l.detail);
+        let scrubbed = text;
+        for (const n of needles) scrubbed = scrubbed.split(JSON.stringify(n).slice(1, -1)).join("[REDACTED]");
+        if (scrubbed !== text) await tx.auditLog.update({ where: { id: l.id }, data: { detail: JSON.parse(scrubbed) } });
+      }
+    }
+  }, { timeout: 60_000 });
+  return true;
 }

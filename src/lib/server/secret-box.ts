@@ -1,6 +1,7 @@
 /**
- * Encrypts shops' card provider keys (Stripe Terminal, SumUp, Dojo) before they go into the database,
- * so a leaked backup or database dump doesn't hand out working keys.
+ * Encrypts shops' card provider keys (Stripe Terminal, SumUp, Dojo) and users' two-step sign-in
+ * (authenticator app) secrets before they go into the database, so a leaked backup or database dump
+ * doesn't hand out working keys or let someone generate sign-in codes.
  *
  * AES-256-GCM with a server-only key from SECRETS_ENCRYPTION_KEY (any long random string, e.g.
  * `openssl rand -base64 32`). Stored values look like `enc:v1:<base64url>`. Values saved before

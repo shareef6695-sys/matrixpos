@@ -674,11 +674,15 @@ enum InvoiceStatus {
   VOID
 }
 
-/** MatrixPOS's invoices to a business for its subscription (card via Stripe, or bank transfer). */
+/**
+ * MatrixPOS's invoices to a business for its subscription (card via Stripe, or bank transfer).
+ * These are MatrixPOS's own tax records, so they outlive the business's account: when a closed business is
+ * deleted, organizationId becomes null and the bill-to email is cleared. They're deleted 7 years after issue.
+ */
 model SubscriptionInvoice {
   id              String        @id @default(cuid())
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  organizationId  String
+  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  organizationId  String?
   number          String        @unique // MPI-0001, or Stripe's own number for card invoices
   status          InvoiceStatus @default(OPEN)
   method          String        @default("BANK") // BANK or CARD
