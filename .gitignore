@@ -1,9 +1,17 @@
 node_modules
 .next
 out
+# Environment files hold real secrets. Only .env.example (placeholders) is committed.
 .env
-.env.local
+.env.*
+!.env.example
+deploy/vps/.env
+deploy/**/.env
+# Keys and certificates
+*.pem
+*.key
+*.p12
+deploy/vps/certs/
 *.tsbuildinfo
 next-env.d.ts
 .vercel
-deploy/vps/.env

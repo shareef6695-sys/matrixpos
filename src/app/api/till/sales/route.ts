@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/server/db";
 import { getDevice } from "@/lib/server/auth";
 import { recordSale, saleSchema, json, fail } from "@/lib/server/till";
+import { safeErrorMessage } from "@/lib/server/redact";
 
 /**
  * Sync endpoint. Accepts one or more sales queued by the till (including ones made offline).
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
       const r = await recordSale(device.orgId, device.storeId, device.registerId, s.data);
       results.push({ id, ok: !!r, error: r ? undefined : "Not allowed" });
     } catch (e) {
-      results.push({ id, ok: false, error: e instanceof Error ? e.message : "Failed" });
+      results.push({ id, ok: false, error: safeErrorMessage(e, "Failed") });
     }
   }
   return json({ results });

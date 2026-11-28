@@ -1,6 +1,7 @@
 import "server-only";
 import { headers } from "next/headers";
 import { COMPANY } from "@/components/PoweredBy";
+import { safeError } from "@/lib/server/redact";
 
 export interface Email { to: string; subject: string; text: string; html?: string }
 
@@ -37,14 +38,16 @@ export async function sendEmail(e: Email): Promise<boolean> {
       await t.sendMail({ from: from(), to: e.to, subject: e.subject, text: e.text, html });
       return true;
     }
-    if (process.env.NODE_ENV !== "production" || process.env.EMAIL_LOG === "1") {
+    // Emails hold sign-in, verification and password reset links, so their text is only printed
+    // in local development or a preview deploy, never on the live site.
+    if (process.env.NODE_ENV !== "production" || (process.env.EMAIL_LOG === "1" && process.env.VERCEL_ENV !== "production")) {
       console.log(`\n[email to ${e.to}] ${e.subject}\n${e.text}\n`);
       return true;
     }
     console.error("Email not sent: set RESEND_API_KEY or SMTP_HOST");
     return false;
   } catch (err) {
-    console.error("Email failed", err);
+    console.error("Email failed", safeError(err));
     return false;
   }
 }

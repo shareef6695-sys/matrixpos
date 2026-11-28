@@ -14,7 +14,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma generate && node scripts/migrate.mjs && next build"
+    "vercel-build": "prisma generate && node scripts/migrate.mjs && node scripts/encrypt-secrets.mjs && next build",
+    "secrets:encrypt": "node scripts/encrypt-secrets.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
