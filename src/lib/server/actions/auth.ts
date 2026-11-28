@@ -20,8 +20,8 @@ export type FormState = { error?: string; ok?: string } | undefined;
 const safeNext = (n: string) => (n.startsWith("/") && !n.startsWith("//") ? n : "/admin");
 const TOO_MANY = "Too many sign-in attempts. Please wait 15 minutes, or reset your password.";
 
-async function startSession(user: { id: string; organizationId: string; role: "OWNER" | "MANAGER" | "SUPERVISOR" | "CASHIER"; name: string }) {
-  const token = await sign({ kind: "admin", userId: user.id, orgId: user.organizationId, role: user.role, name: user.name }, ADMIN_MAX_AGE);
+export async function startSession(user: { id: string; organizationId: string; role: "OWNER" | "MANAGER" | "SUPERVISOR" | "CASHIER"; name: string; sessionVersion: number }) {
+  const token = await sign({ kind: "admin", userId: user.id, orgId: user.organizationId, role: user.role, name: user.name, v: user.sessionVersion }, ADMIN_MAX_AGE);
   (await cookies()).set(ADMIN_COOKIE, token, cookieOpts(ADMIN_MAX_AGE));
 }
 

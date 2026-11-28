@@ -10,6 +10,12 @@ import { parseGBP } from "@/lib/pos/money";
 import type { FormState } from "./auth";
 import { overLimit, clampFeatures } from "@/lib/server/billing";
 
+/** The public demo login is shared, so its staff logins and settings can't be changed. */
+async function demoBlocked(orgId: string) {
+  const o = await db.organization.findUnique({ where: { id: orgId }, select: { slug: true } });
+  return o?.slug === "demo-mart" ? "This can't be changed on the demo shop. Create your own shop to try it." : null;
+}
+
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const optional = (f: FormData, k: string) => str(f, k) || null;
 
@@ -238,6 +244,8 @@ async function pinInUse(orgId: string, pin: string, exceptId?: string | null) {
 
 export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
   const s = await requireAdmin();
+  const demo = await demoBlocked(s.orgId);
+  if (demo) return { error: demo };
   const id = optional(f, "id");
   const role = str(f, "role") as "OWNER" | "MANAGER" | "SUPERVISOR" | "CASHIER";
   if (!["OWNER", "MANAGER", "SUPERVISOR", "CASHIER"].includes(role)) return { error: "Choose a role" };
@@ -270,7 +278,8 @@ export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
     if (u.id === s.userId && role !== u.role) return { error: "You can't change your own role" };
     await db.$transaction([
       // A new email address has to be confirmed again.
-      db.user.update({ where: { id }, data: { ...data, ...(email !== u.email ? { emailVerifiedAt: null } : {}) } }),
+      // A new password signs them out on other devices; a new email address has to be confirmed again.
+      db.user.update({ where: { id }, data: { ...data, ...(password ? { sessionVersion: { increment: 1 } } : {}), ...(email !== u.email ? { emailVerifiedAt: null } : {}) } }),
       db.userStore.deleteMany({ where: { userId: id } }),
       db.userStore.createMany({ data: validStores.map((v) => ({ userId: id, storeId: v.id })) }),
     ]);
@@ -329,6 +338,8 @@ export async function saveRegister(f: FormData) {
 
 export async function saveSettings(_: FormState, f: FormData): Promise<FormState> {
   const s = await requireAdmin("OWNER");
+  const demo = await demoBlocked(s.orgId);
+  if (demo) return { error: demo };
   const on = (k: string) => f.get(k) === "on";
   const secret = (k: string) => {
     const v = str(f, k);

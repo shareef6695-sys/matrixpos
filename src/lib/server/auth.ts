@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
@@ -20,9 +21,18 @@ export const cookieOpts = (maxAge: number) => ({
   maxAge,
 });
 
-export async function getAdmin() {
-  return verify<AdminSession>((await cookies()).get(ADMIN_COOKIE)?.value, "admin");
-}
+/**
+ * The signed-in back office user, or null. Checked against the database on every request, so a person who is
+ * switched off, or whose password was changed or reset, is signed out at once, and role changes apply straight away.
+ */
+export const getAdmin = cache(async (): Promise<AdminSession | null> => {
+  const s = await verify<AdminSession>((await cookies()).get(ADMIN_COOKIE)?.value, "admin");
+  if (!s) return null;
+  const u = await db.user.findUnique({ where: { id: s.userId }, select: { active: true, role: true, name: true, organizationId: true, sessionVersion: true } });
+  if (!u || !u.active || u.organizationId !== s.orgId || (s.v ?? 0) !== u.sessionVersion) return null;
+  if (u.role === "CASHIER" || u.role === "SUPERVISOR") return null;
+  return { ...s, role: u.role, name: u.name };
+});
 
 /**
  * For back office pages and server actions. Redirects to login if not signed in or role too low,

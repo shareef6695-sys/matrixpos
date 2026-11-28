@@ -13,7 +13,7 @@ import { newSecret, verifyTotp } from "@/lib/server/totp";
 import { requirePlatformAdmin } from "@/lib/server/billing";
 import { ADMIN_COOKIE } from "@/lib/session";
 import { LEGAL } from "@/lib/legal";
-import type { FormState } from "./auth";
+import { startSession, type FormState } from "./auth";
 
 /** The public demo login is shared, so nobody may change its password, two-step sign-in or close it. */
 const DEMO = "Not available on the demo account.";
@@ -52,7 +52,8 @@ export async function resetPassword(_: FormState, f: FormData): Promise<FormStat
   const userId = await consumeToken(String(f.get("token") ?? ""), "RESET_PASSWORD");
   if (!userId) return { error: "This link has expired or was already used. Please ask for a new one." };
   // Opening the link proves they own the email address.
-  const user = await db.user.update({ where: { id: userId }, data: { passwordHash: await hash(password), emailVerifiedAt: new Date() } });
+  // Bumping sessionVersion signs this person out on every device.
+  const user = await db.user.update({ where: { id: userId }, data: { passwordHash: await hash(password), emailVerifiedAt: new Date(), sessionVersion: { increment: 1 } } });
   await db.loginAttempt.deleteMany({ where: { key: `email:${user.email}` } });
   await audit(user.organizationId, user.id, "password.reset");
   if (user.email) await sendEmail({ to: user.email, subject: "Your MatrixPOS password was changed", text: `Hi ${user.name},\n\nYour MatrixPOS password was just changed. If this wasn't you, reset it straight away and contact us.` });
@@ -69,7 +70,9 @@ export async function changePassword(_: FormState, f: FormData): Promise<FormSta
   if (!user.passwordHash || !(await compare(current, user.passwordHash))) return { error: "Your current password isn't right" };
   if (password.length < 8) return { error: "New password must be at least 8 characters" };
   if (password !== String(f.get("confirm") ?? "")) return { error: "The two new passwords don't match" };
-  await db.user.update({ where: { id: user.id }, data: { passwordHash: await hash(password) } });
+  // Signs out every other device, and keeps this one signed in with a fresh session.
+  const updated = await db.user.update({ where: { id: user.id }, data: { passwordHash: await hash(password), sessionVersion: { increment: 1 } } });
+  await startSession(updated);
   await audit(s.orgId, s.userId, "password.change");
   return { ok: "Password changed." };
 }

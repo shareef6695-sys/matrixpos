@@ -212,6 +212,7 @@ model User {
   active         Boolean      @default(true)
   createdAt      DateTime     @default(now())
   emailVerifiedAt DateTime?
+  sessionVersion Int          @default(0) // bumped to sign the person out everywhere
   totpSecret     String? // two-step sign-in (authenticator app), base32
   totpEnabledAt  DateTime?
   authTokens     AuthToken[]

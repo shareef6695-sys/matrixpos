@@ -8,7 +8,8 @@ export const MFA_COOKIE = "mpos_mfa";
 
 export type Role = "OWNER" | "MANAGER" | "SUPERVISOR" | "CASHIER";
 
-export interface AdminSession { kind: "admin"; userId: string; orgId: string; role: Role; name: string }
+/** v is the user's sessionVersion when they signed in; bumping it signs them out everywhere. */
+export interface AdminSession { kind: "admin"; userId: string; orgId: string; role: Role; name: string; v?: number }
 export interface DeviceSession { kind: "device"; orgId: string; storeId: string; registerId: string }
 /** Password was right; waiting for the two-step code. */
 export interface MfaSession { kind: "mfa"; userId: string; next: string }
