@@ -3,7 +3,7 @@ import { AuthCard } from "@/components/AuthCard";
 import { SimpleForm } from "@/components/SimpleForm";
 import { forgotPassword } from "@/lib/server/actions/account";
 
-export const metadata = { title: "Forgot password" };
+export const metadata = { title: "Forgot password", robots: { index: false } };
 
 export default function ForgotPassword() {
   return (

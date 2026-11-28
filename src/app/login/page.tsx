@@ -3,7 +3,7 @@ import { AuthCard } from "@/components/AuthCard";
 import { LoginForm } from "./LoginForm";
 import { showDemoLogin } from "@/lib/server/demo";
 
-export const metadata = { title: "Sign in" };
+export const metadata = { title: "Sign in", robots: { index: false } };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; reset?: string }> }) {
   const { next, reset } = await searchParams;

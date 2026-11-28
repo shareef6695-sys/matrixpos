@@ -1,17 +1,21 @@
-import { PoweredBy } from "@/components/PoweredBy";
 import Link from "next/link";
-import { Logo } from "@/components/Logo";
+import { SiteFooter, SiteHeader } from "@/components/marketing";
 import { PricingCards } from "@/components/Pricing";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { seller } from "@/lib/legal";
+import { LANDING_PAGES } from "@/lib/landing";
+import { JsonLd, homeJsonLd } from "@/lib/site";
 import { showDemoLogin } from "@/lib/server/demo";
 
-const faqs = [
+export const metadata = { alternates: { canonical: "/" } };
+
+const faqs: [string, string][] = [
   ["Do I need a card to start?", `No. Every plan is free for ${TRIAL_DAYS} days and we don't ask for card details. Pick a plan when you're happy.`],
   ["Do you take a cut of my card payments?", "No. You keep your own card provider (Stripe, SumUp, Dojo or any standalone machine) and its rates. MatrixPOS is a flat monthly fee."],
   ["Do I need to buy special hardware?", "No. Use the tablet, laptop or till PC you already have, with any USB or Bluetooth barcode scanner and receipt printer."],
   ["Can I change plan later?", "Yes, up or down at any time. Your products, sales and accounts stay exactly where they are."],
   ["Where is my data kept?", "On servers in the United Kingdom, backed up every night."],
+  ["What kind of shops use MatrixPOS?", "Independent supermarkets, mini markets, convenience stores, corner shops, off-licences, delis and butchers, and other small retailers across the UK."],
 ];
 
 const features = [
@@ -28,21 +32,14 @@ const features = [
 export default function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-white to-brand-50">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
-        <Logo className="text-xl" />
-        <nav className="flex gap-2">
-          <a href="#pricing" className="btn-secondary hidden sm:inline-flex">Pricing</a>
-          <Link href="/till" className="btn-secondary">Open till</Link>
-          <Link href="/login" className="btn-secondary">Sign in</Link>
-          <Link href="/signup" className="btn-primary hidden sm:inline-flex">Start free</Link>
-        </nav>
-      </header>
+      <JsonLd data={homeJsonLd(faqs)} />
+      <SiteHeader />
       <section className="mx-auto max-w-6xl px-4 pb-12 pt-10 text-center sm:pt-20">
         <h1 className="mx-auto max-w-3xl text-4xl font-extrabold tracking-tight text-slate-900 sm:text-6xl">
-          The point of sale built for <span className="text-brand-700">British shops</span>
+          The POS system built for <span className="text-brand-700">UK supermarkets and convenience stores</span>
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-lg text-slate-600">
-          MatrixPOS runs on the tablet, laptop or till PC you already have. Built for supermarkets, convenience stores, off-licences, cafés and every small business in the UK.
+          MatrixPOS is a cloud EPOS till that runs on the tablet, laptop or till PC you already have. Built for independent supermarkets, corner shops, off-licences and every small retailer in the UK.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href="/signup" className="btn-primary px-6 py-3 text-base">Create your shop</Link>
@@ -57,6 +54,18 @@ export default function Home() {
             <p className="mt-2 text-sm text-slate-600">{d}</p>
           </div>
         ))}
+      </section>
+      <section className="mx-auto max-w-6xl px-4 pb-20">
+        <h2 className="mb-6 text-center text-2xl font-bold text-slate-900">Made for your kind of shop</h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {LANDING_PAGES.map((p) => (
+            <Link key={p.slug} href={`/${p.slug}`} className="card transition hover:ring-2 hover:ring-brand-600">
+              <h3 className="font-semibold text-slate-900">{p.navLabel}</h3>
+              <p className="mt-2 text-sm text-slate-600">{p.h1}.</p>
+              <span className="mt-3 inline-block text-sm font-semibold text-brand-700">Learn more →</span>
+            </Link>
+          ))}
+        </div>
       </section>
       <section id="pricing" className="scroll-mt-6 border-t border-slate-200 bg-white py-20">
         <div className="mx-auto max-w-6xl px-4">
@@ -82,15 +91,7 @@ export default function Home() {
           <Link href="/signup" className="btn-primary px-6 py-3 text-base">Start your free trial</Link>
         </div>
       </section>
-      <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-500">
-        MatrixPOS · Data hosted in the United Kingdom · UK GDPR ready
-        <div className="mt-2 flex justify-center gap-4 font-semibold text-slate-600">
-          <Link href="/privacy" className="hover:text-slate-900">Privacy</Link>
-          <Link href="/terms" className="hover:text-slate-900">Terms</Link>
-          <Link href="/dpa" className="hover:text-slate-900">Data processing</Link>
-        </div>
-        <PoweredBy className="mt-1" />
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

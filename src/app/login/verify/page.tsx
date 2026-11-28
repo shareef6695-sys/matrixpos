@@ -3,7 +3,7 @@ import { AuthCard } from "@/components/AuthCard";
 import { SimpleForm } from "@/components/SimpleForm";
 import { verifyLoginCode } from "@/lib/server/actions/auth";
 
-export const metadata = { title: "Two-step sign-in" };
+export const metadata = { title: "Two-step sign-in", robots: { index: false } };
 
 export default function VerifyLogin() {
   return (

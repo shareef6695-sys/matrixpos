@@ -4,7 +4,7 @@ import { SimpleForm } from "@/components/SimpleForm";
 import { resetPassword } from "@/lib/server/actions/account";
 import { peekToken } from "@/lib/server/tokens";
 
-export const metadata = { title: "Choose a new password" };
+export const metadata = { title: "Choose a new password", robots: { index: false } };
 
 export default async function ResetPassword({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
   const { token = "" } = await searchParams;
