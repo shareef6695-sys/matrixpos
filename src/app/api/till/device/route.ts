@@ -3,17 +3,18 @@ import { db } from "@/lib/server/db";
 import { getAdmin, cookieOpts, orgAllowed } from "@/lib/server/auth";
 import { DEVICE_COOKIE, DEVICE_MAX_AGE, TILL_COOKIE, atLeast, sign } from "@/lib/session";
 import { json, fail } from "@/lib/server/till";
+import { apiRoute } from "@/lib/server/errors";
 
 /** Lists tills a manager can link this device to. */
-export async function GET() {
+export const GET = apiRoute("GET /api/till/device", async () => {
   const admin = await getAdmin();
   if (!admin || !atLeast(admin.role, "MANAGER")) return fail("Sign in as a manager to set up this till", 401);
   const stores = await db.store.findMany({ where: { organizationId: admin.orgId }, include: { registers: { orderBy: { number: "asc" } } }, orderBy: { name: "asc" } });
   return json({ stores: stores.map((s) => ({ id: s.id, name: s.name, code: s.code, registers: s.registers.map((r) => ({ id: r.id, name: r.name })) })) });
-}
+});
 
 /** Links this browser to a till. Requires a manager's back office session. */
-export async function POST(req: Request) {
+export const POST = apiRoute("POST /api/till/device", async (req: Request) => {
   const admin = await getAdmin();
   if (!admin || !atLeast(admin.role, "MANAGER")) return fail("Sign in as a manager to set up this till", 401);
   if (!(await orgAllowed(admin.orgId))) return fail("This shop's MatrixPOS subscription isn't active. See Billing in the back office.", 402);
@@ -25,11 +26,11 @@ export async function POST(req: Request) {
   jar.set(DEVICE_COOKIE, token, cookieOpts(DEVICE_MAX_AGE));
   jar.delete(TILL_COOKIE);
   return json({ ok: true });
-}
+});
 
-export async function DELETE() {
+export const DELETE = apiRoute("DELETE /api/till/device", async () => {
   const jar = await cookies();
   jar.delete(DEVICE_COOKIE);
   jar.delete(TILL_COOKIE);
   return json({ ok: true });
-}
+});

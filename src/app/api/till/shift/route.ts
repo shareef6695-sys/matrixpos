@@ -1,17 +1,18 @@
 import { db } from "@/lib/server/db";
 import { postCashMovement, postShiftClose } from "@/lib/server/accounting";
 import { tillContext, shiftSummary, nextCounter, json, fail, audit } from "@/lib/server/till";
+import { apiRoute } from "@/lib/server/errors";
 
 /** Current shift summary (X report). */
-export async function GET() {
+export const GET = apiRoute("GET /api/till/shift", async () => {
   const ctx = await tillContext();
   if (!ctx) return fail("Sign in at the till first", 401);
   const shift = await db.shift.findFirst({ where: { registerId: ctx.device.registerId, closedAt: null } });
   return json({ report: shift ? await shiftSummary(shift.id) : null });
-}
+});
 
 /** open | close (Z report) | cash (paid in / paid out / safe drop) */
-export async function POST(req: Request) {
+export const POST = apiRoute("POST /api/till/shift", async (req: Request) => {
   const ctx = await tillContext();
   if (!ctx) return fail("Sign in at the till first", 401);
   const body = await req.json().catch(() => ({}));
@@ -52,4 +53,4 @@ export async function POST(req: Request) {
     return json({ report: await shiftSummary(open.id) });
   }
   return fail("Unknown action");
-}
+});

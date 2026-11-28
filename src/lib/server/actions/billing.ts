@@ -11,7 +11,8 @@ import { appUrl } from "@/lib/server/email";
 import { seller } from "@/lib/legal";
 import { createBankInvoice, emailInvoice, markInvoicePaid, saveStripeInvoice } from "@/lib/server/invoices";
 import { priceFor, removeVatFromSubscription, stripe, stripeBillingEnabled, syncSubscription, vatRate } from "@/lib/server/stripe-billing";
-import { safeError, safeErrorMessage } from "@/lib/server/redact";
+import { safeError } from "@/lib/server/redact";
+import { logError } from "@/lib/server/errors";
 
 const PLAN_IDS = PLANS.map((p) => p.id) as string[];
 
@@ -155,8 +156,8 @@ export async function payByCard(_: FormState, f: FormData): Promise<FormState> {
     });
     url = session.url!;
   } catch (e) {
-    console.error("Stripe checkout failed", safeError(e));
-    return { error: `Card payment couldn't start: ${safeErrorMessage(e, "unknown error")}. Please try again, or request an invoice.` };
+    const ref = await logError("Stripe checkout", e);
+    return { error: `Card payment couldn't start. Please try again, or request an invoice. Error reference: ${ref}` };
   }
   redirect(url);
 }
