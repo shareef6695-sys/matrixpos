@@ -1098,7 +1098,7 @@ model HqAccount {
 model HqJournal {
   id        String   @id @default(cuid())
   date      DateTime
-  source    String // INVOICE, INVOICE_VOID, PAYMENT, CREDIT_NOTE, BILL, BILL_VOID, BILL_PAYMENT, BANK, MANUAL
+  source    String // INVOICE, INVOICE_VOID, PAYMENT, CREDIT_NOTE, BILL, BILL_VOID, BILL_PAYMENT, BANK, MANUAL, POS_INVOICE, POS_INVOICE_VOID, POS_PAYMENT, VAT_RETURN, CT_ACCRUAL, YEAR_END
   sourceId  String?
   reference String?
   memo      String?
@@ -1130,9 +1130,25 @@ model HqJournalLine {
  * One row: the books' settings.
  */
 model HqSettings {
-  id        String    @id @default("hq")
-  lockDate  DateTime? // nothing dated on or before this can be added, changed or removed
-  updatedAt DateTime  @updatedAt
+  id       String    @id @default("hq")
+  lockDate DateTime? // nothing dated on or before this can be added, changed or removed
+
+  // VAT (phase 4). Charging VAT itself is switched on with CHARGE_VAT and INVOICE_VAT_NUMBER.
+  vatRegisteredFrom DateTime? // VAT is only charged and reclaimed on documents dated from this day
+  vatStaggerMonth   Int? // the month the first VAT quarter of the year ends: 1, 2 or 3
+
+  // Company year end (phase 4)
+  yearEndMonth Int? // 1-12
+  yearEndDay   Int? // 1-31
+
+  // Making Tax Digital: the HMRC connection. Tokens are sealed with SECRETS_ENCRYPTION_KEY.
+  hmrcVrn          String?
+  hmrcAccessToken  String?
+  hmrcRefreshToken String?
+  hmrcTokenExpires DateTime?
+  hmrcConnectedAt  DateTime?
+  hmrcOauthState   String?
+  updatedAt        DateTime  @updatedAt
 }
 
 model HqSupplier {
@@ -1470,4 +1486,53 @@ model HqContract {
 
   @@index([status, endDate])
   @@index([clientId])
+}
+
+// ---------------- Matrix HQ: VAT and year-end (phase 4) ----------------
+
+enum HqVatReturnStatus {
+  DRAFT
+  FILED
+}
+
+/**
+ * A VAT return worked out from the books. Boxes 1-5 are pence; boxes 6-9 are whole pounds, as HMRC wants them.
+ */
+model HqVatReturn {
+  id              String            @id @default(cuid())
+  periodStart     DateTime
+  periodEnd       DateTime
+  dueDate         DateTime
+  periodKey       String? // HMRC's key for the obligation, once connected
+  status          HqVatReturnStatus @default(DRAFT)
+  box1            Int               @default(0)
+  box2            Int               @default(0)
+  box3            Int               @default(0)
+  box4            Int               @default(0)
+  box5            Int               @default(0)
+  box6            Int               @default(0)
+  box7            Int               @default(0)
+  box8            Int               @default(0)
+  box9            Int               @default(0)
+  filedAt         DateTime?
+  filedById       String?
+  submittedToHmrc Boolean           @default(false)
+  hmrcReceipt     Json? // processingDate, formBundleNumber, paymentIndicator, chargeRefNumber
+  notes           String?
+  createdAt       DateTime          @default(now())
+
+  @@unique([periodStart, periodEnd])
+}
+
+/**
+ * A financial year that has been closed: its profit moved to retained profit and the books locked.
+ */
+model HqYearEnd {
+  id          String   @id @default(cuid())
+  yearStart   DateTime
+  yearEnd     DateTime @unique
+  profitPence Int
+  taxPence    Int      @default(0) // Corporation Tax put aside
+  closedById  String?
+  closedAt    DateTime @default(now())
 }

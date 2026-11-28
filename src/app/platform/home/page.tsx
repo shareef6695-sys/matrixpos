@@ -5,9 +5,12 @@ import { PageHeader, Stat } from "@/components/admin";
 import { formatMoney, toGbpPence } from "@/lib/hq/money";
 import { formatGBP } from "@/lib/pos/money";
 import { LEAD_STAGES, LEAD_STAGE_LABEL, INVOICE_STATUS } from "@/lib/hq/labels";
-import { fmtDate, londonDate, londonDayStart } from "@/lib/dates";
+import { addDays, fmtDate, londonDate, londonDayStart } from "@/lib/dates";
 import { Pill } from "@/components/hq/ui";
 import { fmtMinutes, renewalState } from "@/lib/hq/projects";
+import { hqSettings, rollingTurnover, taxDeadlines } from "@/lib/server/hq-vat";
+import { VAT_THRESHOLD_PENCE } from "@/lib/hq/books";
+
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +42,11 @@ export default async function HqHome({ searchParams }: { searchParams: Promise<{
       db.hqContract.findMany({ where: { status: "ACTIVE", endDate: { not: null } }, select: { endDate: true, noticeDays: true, status: true } }),
     ]),
   ]);
+  // Tax: deadlines in the next 45 days (or missed), and a warning as sales near the VAT threshold.
+  const books = h.can("accounts.view");
+  const [deadlines, turnover, settings] = books ? await Promise.all([taxDeadlines(today), rollingTurnover(today), hqSettings()]) : [[], 0, null];
+  const soon = deadlines.filter((d) => d.due <= addDays(today, 45));
+  const nearVat = books && !settings?.vatRegisteredFrom && turnover >= VAT_THRESHOLD_PENCE * 0.75;
   const renewalsDue = work[2].filter((c) => ["due", "overdue"].includes(renewalState({ status: c.status, endDate: londonDate(c.endDate!), noticeDays: c.noticeDays }, today))).length;
   const now = Date.now();
   const owed = (i: (typeof open)[number]) => toGbpPence(i.totalMinor - i.paidMinor, i.currency, Number(i.perGbp));
@@ -79,6 +87,21 @@ export default async function HqHome({ searchParams }: { searchParams: Promise<{
         <Link href="/platform/projects" className="block"><Stat label="Unbilled hours" value={fmtMinutes(work[1]._sum.minutes ?? 0)} sub="Billable time not yet invoiced" /></Link>
         <Link href="/platform/contracts" className="block"><Stat label="Renewals due" value={String(renewalsDue)} sub="Contracts to renew now" /></Link>
       </div>
+
+      {(soon.length > 0 || nearVat) && (
+        <div className="card mb-6 text-sm">
+          <h2 className="mb-2 font-semibold">Tax</h2>
+          <ul className="space-y-1">
+            {nearVat && <li><Link href="/platform/accounts/vat" className="font-semibold text-amber-700">Sales in the last 12 months are {formatGBP(turnover)}, {Math.round((turnover / VAT_THRESHOLD_PENCE) * 100)}% of the VAT threshold</Link></li>}
+            {soon.map((d) => (
+              <li key={d.what} className="flex flex-wrap justify-between gap-3">
+                <Link href={d.href} className="text-violet-700">{d.what}</Link>
+                <span className={d.due < today ? "font-semibold text-red-700" : "text-slate-600"}>{d.due < today ? "Was due " : "Due "}{fmtDate(d.due)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="card">

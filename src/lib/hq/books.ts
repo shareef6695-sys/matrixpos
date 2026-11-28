@@ -7,7 +7,8 @@ export type AccountType = "ASSET" | "LIABILITY" | "EQUITY" | "INCOME" | "EXPENSE
 export type HqKey =
   | "BANK" | "DEBTORS" | "CREDITORS" | "VAT_OUTPUT" | "VAT_INPUT" | "CAPITAL" | "RETAINED"
   | "SALES" | "SALES_WEB" | "SALES_POS" | "SALES_RESALE" | "SALES_SUPPORT" | "SALES_IT" | "OTHER_INCOME"
-  | "GENERAL_EXPENSES" | "FX" | "SUSPENSE";
+  | "GENERAL_EXPENSES" | "FX" | "SUSPENSE"
+  | "VAT_CONTROL" | "CT_OWED" | "CT_EXPENSE" | "PAYMENTS";
 
 export interface HqChartAccount { code: string; name: string; type: AccountType; key?: HqKey; isBank?: boolean; cos?: boolean }
 
@@ -19,14 +20,15 @@ export const HQ_CHART: HqChartAccount[] = [
   { code: "1150", name: "Prepayments", type: "ASSET" },
   { code: "1200", name: "Business current account", type: "ASSET", key: "BANK", isBank: true },
   { code: "1210", name: "Business savings account", type: "ASSET", isBank: true },
-  { code: "1250", name: "Stripe and PayPal balances", type: "ASSET", isBank: true },
+  { code: "1250", name: "Stripe and PayPal balances", type: "ASSET", key: "PAYMENTS", isBank: true },
   { code: "2100", name: "Trade creditors (you owe suppliers)", type: "LIABILITY", key: "CREDITORS" },
   { code: "2109", name: "Accruals", type: "LIABILITY" },
   { code: "2200", name: "VAT on sales", type: "LIABILITY", key: "VAT_OUTPUT" },
   { code: "2201", name: "VAT on purchases", type: "LIABILITY", key: "VAT_INPUT" },
+  { code: "2202", name: "VAT owed to HMRC (filed returns)", type: "LIABILITY", key: "VAT_CONTROL" },
   { code: "2210", name: "PAYE and National Insurance owed", type: "LIABILITY" },
   { code: "2220", name: "Pension contributions owed", type: "LIABILITY" },
-  { code: "2300", name: "Corporation Tax owed", type: "LIABILITY" },
+  { code: "2300", name: "Corporation Tax owed", type: "LIABILITY", key: "CT_OWED" },
   { code: "2400", name: "Director's loan account", type: "LIABILITY" },
   { code: "3000", name: "Share capital", type: "EQUITY", key: "CAPITAL" },
   { code: "3100", name: "Retained profit", type: "EQUITY", key: "RETAINED" },
@@ -58,7 +60,7 @@ export const HQ_CHART: HqChartAccount[] = [
   { code: "6900", name: "Depreciation", type: "EXPENSE" },
   { code: "7000", name: "General expenses", type: "EXPENSE", key: "GENERAL_EXPENSES" },
   { code: "7900", name: "Exchange rate gains and losses", type: "EXPENSE", key: "FX" },
-  { code: "8000", name: "Corporation Tax", type: "EXPENSE" },
+  { code: "8000", name: "Corporation Tax", type: "EXPENSE", key: "CT_EXPENSE" },
   { code: "9999", name: "Suspense (to sort out)", type: "ASSET", key: "SUSPENSE" },
 ];
 
@@ -205,4 +207,111 @@ export function cashFlow(journals: { lines: { accountId: string; debit: number; 
     .sort((a, b) => a.code.localeCompare(b.code));
   const total = (s: string) => rows.filter((r) => r.section === s).reduce((n, r) => n + r.amount, 0);
   return { rows, operating: total("Operating"), investing: total("Investing"), financing: total("Financing"), net: rows.reduce((n, r) => n + r.amount, 0) };
+}
+
+// ---------------- VAT (phase 4) ----------------
+
+/** Costs that are outside the scope of VAT and so left out of box 7: wages, pensions, depreciation, exchange differences, Corporation Tax. */
+const OUTSIDE_VAT = new Set(["6000", "6010", "6020", "6030", "6900", "7900", "8000"]);
+
+/**
+ * The nine boxes of a VAT return from the period's balances (accrual basis). Boxes 1-5 in pence; 6-9 in whole
+ * pounds, rounded down as HMRC allows. Box 2, 8 and 9 are only for Northern Ireland goods trade, so they're 0.
+ */
+export function vatBoxes(b: Balance[]) {
+  const by = (k: string) => b.find((a) => a.key === k);
+  const out = by("VAT_OUTPUT"), inp = by("VAT_INPUT");
+  const box1 = out ? out.credit - out.debit : 0;
+  const box4 = inp ? inp.debit - inp.credit : 0;
+  const sales = b.filter((a) => a.type === "INCOME").reduce((n, a) => n + a.balance, 0);
+  const purchases = b.filter((a) => a.type === "EXPENSE" && !OUTSIDE_VAT.has(a.code)).reduce((n, a) => n + a.balance, 0)
+    + b.filter((a) => a.type === "ASSET" && a.code < "1000" && !/depreciation/i.test(a.name)).reduce((n, a) => n + Math.max(0, a.debit - a.credit), 0);
+  const pounds = (p: number) => (p >= 0 ? Math.floor(p / 100) : -Math.floor(-p / 100));
+  return { box1, box2: 0, box3: box1, box4, box5: box1 - box4, box6: pounds(sales), box7: pounds(purchases), box8: 0, box9: 0 };
+}
+export type VatBoxes = ReturnType<typeof vatBoxes>;
+
+/** Filing a return moves its VAT into "VAT owed to HMRC", which the payment (or refund) then clears. */
+export function vatReturnJournal(box1: number, box4: number): HqLineDraft[] {
+  return nonZero([
+    signed({ key: "VAT_OUTPUT" }, box1, "VAT on sales for the return"),
+    signed({ key: "VAT_INPUT" }, -box4, "VAT reclaimed on the return"),
+    signed({ key: "VAT_CONTROL" }, box4 - box1, box1 >= box4 ? "VAT to pay" : "VAT refund due"),
+  ]);
+}
+
+const ymdAdd = (ymd: string, months: number, days = 0) => {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const first = new Date(Date.UTC(y, m - 1 + months, 1));
+  const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  const t = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(d, last)) + days * 86_400_000);
+  return t.toISOString().slice(0, 10);
+};
+const monthEnd = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); // m is 1-12
+
+/**
+ * VAT quarters from the registration date to today. The stagger is the month (1, 2 or 3) that the first quarter
+ * of the calendar year ends in. The first return starts on the registration date. Each is due a month and 7 days
+ * after it ends.
+ */
+export function vatQuarters(registeredFrom: string, stagger: 1 | 2 | 3, today: string) {
+  const out: { start: string; end: string; due: string }[] = [];
+  let y = Number(registeredFrom.slice(0, 4)) - 1, m = stagger;
+  let end = monthEnd(y, m);
+  while (end < registeredFrom) { m += 3; if (m > 12) { m -= 12; y++; } end = monthEnd(y, m); }
+  let start = registeredFrom;
+  while (start <= today && out.length < 200) {
+    out.push({ start, end, due: ymdAdd(ymdAdd(end, 0, 1), 1, 6) });
+    start = ymdAdd(end, 0, 1);
+    m += 3; if (m > 12) { m -= 12; y++; }
+    end = monthEnd(y, m);
+  }
+  return out;
+}
+
+/** The UK VAT registration threshold (taxable turnover in any rolling 12 months), in pence. £90,000 since 1 April 2024. */
+export const VAT_THRESHOLD_PENCE = 9_000_000;
+
+// ---------------- Year-end (phase 4) ----------------
+
+/** Moves the year's income and costs to retained profit, so the next year starts at nil. */
+export function closingJournal(b: Balance[]): HqLineDraft[] {
+  const pl = b.filter((a) => (a.type === "INCOME" || a.type === "EXPENSE") && a.debit !== a.credit);
+  const lines = pl.map((a) => ({ account: { id: a.id } as HqLineDraft["account"], debit: a.credit > a.debit ? a.credit - a.debit : 0, credit: a.debit > a.credit ? a.debit - a.credit : 0 }));
+  const net = lines.reduce((n, l) => n + l.debit - l.credit, 0); // debits here are income being cleared
+  return nonZero([...lines, signed({ key: "RETAINED" }, -net, "Profit for the year")]);
+}
+
+/**
+ * Corporation Tax on a year's taxable profit, in pence, for the rates from 1 April 2023: 19% up to £50,000,
+ * 25% from £250,000, with marginal relief between. The limits are shared out for a short year. An estimate only:
+ * it assumes no associated companies, and that the accounting profit is the taxable profit.
+ */
+export function corporationTax(profitPence: number, months = 12) {
+  if (profitPence <= 0) return 0;
+  const lower = (5_000_000 * months) / 12, upper = (25_000_000 * months) / 12;
+  if (profitPence <= lower) return Math.round(profitPence * 0.19);
+  if (profitPence >= upper) return Math.round(profitPence * 0.25);
+  return Math.round(profitPence * 0.25 - (3 / 200) * (upper - profitPence));
+}
+
+/** Put the estimated Corporation Tax aside: Dr Corporation Tax / Cr Corporation Tax owed. */
+export const corporationTaxJournal = (taxPence: number): HqLineDraft[] =>
+  nonZero([signed({ key: "CT_EXPENSE" }, taxPence, "Corporation Tax for the year"), signed({ key: "CT_OWED" }, -taxPence)]);
+
+/** The deadlines that follow a company's year end (not its first accounts, which can differ). */
+export function yearEndDeadlines(yearEnd: string) {
+  return {
+    accounts: ymdAdd(yearEnd, 9), // annual accounts to Companies House
+    ctPayment: ymdAdd(ymdAdd(yearEnd, 9), 0, 1), // Corporation Tax to pay, 9 months and a day after
+    ct600: ymdAdd(yearEnd, 12), // Company Tax Return (CT600) to HMRC
+  };
+}
+
+/** The financial year that a date falls in, for a year ending on the given month and day. */
+export function financialYear(date: string, endMonth: number, endDay: number) {
+  const y = Number(date.slice(0, 4));
+  const endThis = new Date(Date.UTC(y, endMonth - 1, Math.min(endDay, new Date(Date.UTC(y, endMonth, 0)).getUTCDate()))).toISOString().slice(0, 10);
+  const end = date <= endThis ? endThis : ymdAdd(endThis, 12);
+  return { start: ymdAdd(ymdAdd(end, -12), 0, 1), end };
 }

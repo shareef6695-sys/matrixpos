@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { chargesVatOn } from "@/lib/server/hq-vat";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
@@ -9,7 +10,6 @@ import { clientIp, overLimit } from "@/lib/server/ratelimit";
 import { parseLines } from "@/lib/hq/lines";
 import { parseMoney, toGbpPence } from "@/lib/hq/money";
 import { PAYMENT_METHODS } from "@/lib/hq/labels";
-import { seller } from "@/lib/legal";
 import { londonDate, londonDayStart, addDays } from "@/lib/dates";
 import { HqLockedError, assertOpen, bankAccount, bankAmount, postInvoice, postInvoiceVoid, postPayment, unpostHq } from "@/lib/server/hq-books";
 
@@ -37,7 +37,7 @@ async function readDocument(f: FormData, kind: "quote" | "invoice") {
   const issueDate = ymd(str(f, "issueDate")) ?? londonDayStart(londonDate());
   const rate = await documentRate(currency, str(f, "perGbp", 30), issueDate);
   if (typeof rate === "string") return { error: rate };
-  const parsed = parseLines(String(f.get("lines") ?? "[]"), currency, seller().chargeVat);
+  const parsed = parseLines(String(f.get("lines") ?? "[]"), currency, await chargesVatOn(issueDate));
   if ("error" in parsed) return { error: parsed.error };
   const itemIds = parsed.lines.map((l) => l.itemId).filter((x): x is string => !!x);
   const known = new Set((await db.hqItem.findMany({ where: { id: { in: itemIds } }, select: { id: true } })).map((i) => i.id));
