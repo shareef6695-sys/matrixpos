@@ -9,6 +9,7 @@ import { postSaleVoid, postStockAdjustment } from "@/lib/server/accounting";
 import { parseGBP } from "@/lib/pos/money";
 import type { FormState } from "./auth";
 import { overLimit, clampFeatures } from "@/lib/server/billing";
+import { sealSecret } from "@/lib/server/secret-box";
 
 /** The public demo login is shared, so its staff logins and settings can't be changed. */
 async function demoBlocked(orgId: string) {
@@ -360,7 +361,7 @@ export async function saveSettings(_: FormState, f: FormData): Promise<FormState
       embeddedBarcodeMode: ["PRICE", "WEIGHT", "OFF"].includes(str(f, "embeddedBarcodeMode")) ? str(f, "embeddedBarcodeMode") : "PRICE",
       ageCheckThreshold: [21, 25].includes(parseInt(str(f, "ageCheckThreshold"), 10)) ? parseInt(str(f, "ageCheckThreshold"), 10) : 25,
       loyaltyPointsPerPound: Math.max(0, Math.min(100, parseInt(str(f, "loyaltyPointsPerPound"), 10) || 1)),
-      stripeSecretKey: secret("stripeSecretKey"), sumupApiKey: secret("sumupApiKey"), sumupMerchantCode: secret("sumupMerchantCode"), dojoApiKey: secret("dojoApiKey"),
+      stripeSecretKey: sealSecret(secret("stripeSecretKey")), sumupApiKey: sealSecret(secret("sumupApiKey")), sumupMerchantCode: secret("sumupMerchantCode"), dojoApiKey: sealSecret(secret("dojoApiKey")),
     }),
   });
   await audit(s.orgId, s.userId, "settings.update");

@@ -53,7 +53,7 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for the UK VPS database setup and Vercel de
 
 - All credentials are environment variables, set in Vercel (Project > Settings > Environment Variables) or a local `.env` file. `.env` and `.env.*` are git-ignored; only [.env.example](.env.example), with placeholders, is committed.
 - Every variable is server-side only. Nothing uses a `NEXT_PUBLIC_` prefix, which would copy the value into the browser. Keep it that way.
-- Shops' own card machine keys (Stripe Terminal, SumUp, Dojo) are stored in the database, used only on the server, and never sent to the browser or included in data exports.
+- Shops' own card machine keys (Stripe Terminal, SumUp, Dojo) are encrypted in the database with AES-256-GCM using `SECRETS_ENCRYPTION_KEY`, decrypted only on the server for the call to the provider, and never sent to the browser or included in data exports. Keys saved before encryption was switched on are encrypted on the next production deploy.
 - Errors from Stripe, card providers and email are passed through `src/lib/server/redact.ts` before they are logged or returned, so keys, tokens and connection-string passwords are masked.
 - The database is only reached by Prisma on the server. On self-hosted Supabase, MatrixPOS tables live in the `matrixpos` schema (not exposed by the REST API), have row level security switched on, and Supabase's `anon` and `authenticated` roles have no access to them. Never put a Supabase `service_role` key anywhere in this app.
 - `npm test` includes a secret scan (`tests/secrets.test.ts`) that fails CI if anything shaped like a live key, token, private key or password-bearing database URL is committed.
