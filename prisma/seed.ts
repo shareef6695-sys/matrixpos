@@ -5,6 +5,12 @@ import bcrypt from "bcryptjs";
 import { gtinCheckDigit } from "../src/lib/pos/barcode";
 import { DEFAULT_CHART } from "../src/lib/accounting/ledger";
 
+// The demo owner has a published password (demo1234), so never create it on the live database.
+if ((process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") && process.env.ALLOW_DEMO_SEED !== "1") {
+  console.error("Refusing to seed demo data in production: the demo login's password is public. Set ALLOW_DEMO_SEED=1 to override.");
+  process.exit(1);
+}
+
 const db = new PrismaClient();
 const SLUG = "demo-mart";
 

@@ -1,9 +1,10 @@
 import { db } from "@/lib/server/db";
 import { getAdmin } from "@/lib/server/auth";
 import { audit } from "@/lib/server/till";
+import { apiRoute } from "@/lib/server/errors";
 
 /** UK GDPR data portability: everything the business holds in MatrixPOS, as one JSON file. Owners only. */
-export async function GET() {
+export const GET = apiRoute("GET /api/admin/export-all", async () => {
   const s = await getAdmin();
   if (!s || s.role !== "OWNER") return new Response("Unauthorised", { status: 401 });
   const where = { organizationId: s.orgId };
@@ -41,4 +42,4 @@ export async function GET() {
   }, null, 1);
   const name = `${organization?.slug ?? "matrixpos"}-export-${new Date().toISOString().slice(0, 10)}.json`;
   return new Response(body, { headers: { "content-type": "application/json; charset=utf-8", "content-disposition": `attachment; filename="${name}"`, "cache-control": "no-store" } });
-}
+});

@@ -3,20 +3,22 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/server/db";
-import { compare, hash, getAdmin, requireAdmin } from "@/lib/server/auth";
+import { compare, hash, getAdmin, passwordProblem, requireAdmin } from "@/lib/server/auth";
 import { audit } from "@/lib/server/till";
 import { consumeToken } from "@/lib/server/tokens";
 import { CLOSURE_DAYS, cancelCardSubscription, deleteOrganization, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/server/account";
 import { sendEmail } from "@/lib/server/email";
-import { clientIp, isLimited, recordAttempt } from "@/lib/server/ratelimit";
+import { clearAttempts, clientIp, isLimited, overLimit, recordAttempt } from "@/lib/server/ratelimit";
 import { newSecret, verifyTotp } from "@/lib/server/totp";
+import { openSecret, sealSecret } from "@/lib/server/secret-box";
 import { requirePlatformAdmin } from "@/lib/server/billing";
 import { ADMIN_COOKIE } from "@/lib/session";
 import { LEGAL } from "@/lib/legal";
-import type { FormState } from "./auth";
+import { startSession, type FormState } from "./auth";
 
 /** The public demo login is shared, so nobody may change its password, two-step sign-in or close it. */
 const DEMO = "Not available on the demo account.";
+const PW_LIMIT = "Too many wrong passwords. Please wait 15 minutes and try again.";
 const isDemo = (email: string | null | undefined) => !!email?.endsWith("@demo.matrixpos.uk");
 
 // ---------------- Email verification ----------------
@@ -36,7 +38,8 @@ export async function forgotPassword(_: FormState, f: FormData): Promise<FormSta
   const email = String(f.get("email") ?? "").trim().toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(email)) return { error: "Enter your email address" };
   const ip = await clientIp();
-  if ((await isLimited(`reset:${email}`, 3, 60)) || (await isLimited(`resetip:${ip}`, 20, 60)))
+  // At most 3 reset requests an hour for one email address, and 3 an hour from one IP address.
+  if ((await isLimited(`reset:${email}`, 3, 60)) || (await isLimited(`resetip:${ip}`, 3, 60)))
     return { error: "Too many requests. Please try again in an hour." };
   await recordAttempt([`reset:${email}`, `resetip:${ip}`], false);
   const user = await db.user.findUnique({ where: { email } });
@@ -46,14 +49,17 @@ export async function forgotPassword(_: FormState, f: FormData): Promise<FormSta
 }
 
 export async function resetPassword(_: FormState, f: FormData): Promise<FormState> {
+  if (await overLimit(`reset-submit:${await clientIp()}`, 10, 60)) return { error: "Too many attempts. Please try again in an hour." };
   const password = String(f.get("password") ?? "");
-  if (password.length < 8) return { error: "Password must be at least 8 characters" };
+  const problem = passwordProblem(password);
+  if (problem) return { error: problem };
   if (password !== String(f.get("confirm") ?? "")) return { error: "The two passwords don't match" };
   const userId = await consumeToken(String(f.get("token") ?? ""), "RESET_PASSWORD");
   if (!userId) return { error: "This link has expired or was already used. Please ask for a new one." };
   // Opening the link proves they own the email address.
-  const user = await db.user.update({ where: { id: userId }, data: { passwordHash: await hash(password), emailVerifiedAt: new Date() } });
-  await db.loginAttempt.deleteMany({ where: { key: `email:${user.email}` } });
+  // Bumping sessionVersion signs this person out on every device.
+  const user = await db.user.update({ where: { id: userId }, data: { passwordHash: await hash(password), emailVerifiedAt: new Date(), sessionVersion: { increment: 1 } } });
+  if (user.email) await clearAttempts([`email:${user.email}`]);
   await audit(user.organizationId, user.id, "password.reset");
   if (user.email) await sendEmail({ to: user.email, subject: "Your MatrixPOS password was changed", text: `Hi ${user.name},\n\nYour MatrixPOS password was just changed. If this wasn't you, reset it straight away and contact us.` });
   (await cookies()).delete(ADMIN_COOKIE);
@@ -64,12 +70,16 @@ export async function changePassword(_: FormState, f: FormData): Promise<FormSta
   const s = await requireAdmin("MANAGER", { allowLocked: true });
   const user = await db.user.findUniqueOrThrow({ where: { id: s.userId } });
   if (isDemo(user.email)) return { error: DEMO };
+  if (await isLimited(`pwcheck:${user.id}`, 5, 15)) return { error: PW_LIMIT };
   const current = String(f.get("current") ?? "");
   const password = String(f.get("password") ?? "");
-  if (!user.passwordHash || !(await compare(current, user.passwordHash))) return { error: "Your current password isn't right" };
-  if (password.length < 8) return { error: "New password must be at least 8 characters" };
+  if (!user.passwordHash || !(await compare(current, user.passwordHash))) { await recordAttempt([`pwcheck:${user.id}`], false); return { error: "Your current password isn't right" }; }
+  const problem = passwordProblem(password);
+  if (problem) return { error: `New ${problem.toLowerCase()}` };
   if (password !== String(f.get("confirm") ?? "")) return { error: "The two new passwords don't match" };
-  await db.user.update({ where: { id: user.id }, data: { passwordHash: await hash(password) } });
+  // Signs out every other device, and keeps this one signed in with a fresh session.
+  const updated = await db.user.update({ where: { id: user.id }, data: { passwordHash: await hash(password), sessionVersion: { increment: 1 } } });
+  await startSession(updated);
   await audit(s.orgId, s.userId, "password.change");
   return { ok: "Password changed." };
 }
@@ -81,7 +91,7 @@ export async function startTotp(): Promise<FormState & { secret?: string }> {
   const me = await db.user.findUniqueOrThrow({ where: { id: s.userId }, select: { email: true } });
   if (isDemo(me.email)) return { error: DEMO };
   const secret = newSecret();
-  await db.user.update({ where: { id: s.userId }, data: { totpSecret: secret, totpEnabledAt: null } });
+  await db.user.update({ where: { id: s.userId }, data: { totpSecret: sealSecret(secret), totpEnabledAt: null } });
   revalidatePath("/admin/account");
   return { secret };
 }
@@ -91,7 +101,11 @@ export async function enableTotp(_: FormState, f: FormData): Promise<FormState> 
   const user = await db.user.findUniqueOrThrow({ where: { id: s.userId } });
   if (isDemo(user.email)) return { error: DEMO };
   if (!user.totpSecret) return { error: "Start again" };
-  if (!verifyTotp(user.totpSecret, String(f.get("code") ?? ""))) return { error: "That code isn't right. Check the time on your phone is set automatically." };
+  if (await isLimited(`mfa-setup:${user.id}`, 5, 15)) return { error: "Too many wrong codes. Please wait 15 minutes and try again." };
+  if (!verifyTotp(openSecret(user.totpSecret)!, String(f.get("code") ?? ""))) {
+    await recordAttempt([`mfa-setup:${user.id}`], false);
+    return { error: "That code isn't right. Check the time on your phone is set automatically." };
+  }
   await db.user.update({ where: { id: s.userId }, data: { totpEnabledAt: new Date() } });
   await audit(s.orgId, s.userId, "mfa.enable");
   revalidatePath("/admin/account");
@@ -101,7 +115,8 @@ export async function enableTotp(_: FormState, f: FormData): Promise<FormState> 
 export async function disableTotp(_: FormState, f: FormData): Promise<FormState> {
   const s = await requireAdmin("MANAGER", { allowLocked: true });
   const user = await db.user.findUniqueOrThrow({ where: { id: s.userId } });
-  if (!user.passwordHash || !(await compare(String(f.get("password") ?? ""), user.passwordHash))) return { error: "Password isn't right" };
+  if (await isLimited(`pwcheck:${user.id}`, 5, 15)) return { error: PW_LIMIT };
+  if (!user.passwordHash || !(await compare(String(f.get("password") ?? ""), user.passwordHash))) { await recordAttempt([`pwcheck:${user.id}`], false); return { error: "Password isn't right" }; }
   await db.user.update({ where: { id: s.userId }, data: { totpSecret: null, totpEnabledAt: null } });
   await audit(s.orgId, s.userId, "mfa.disable");
   revalidatePath("/admin/account");
@@ -127,7 +142,8 @@ export async function requestClosure(_: FormState, f: FormData): Promise<FormSta
   ]);
   if (isDemo(user.email)) return { error: DEMO };
   if (String(f.get("confirmName") ?? "").trim().toLowerCase() !== org.name.trim().toLowerCase()) return { error: "Type your business name exactly to confirm" };
-  if (!user.passwordHash || !(await compare(String(f.get("password") ?? ""), user.passwordHash))) return { error: "Password isn't right" };
+  if (await isLimited(`pwcheck:${user.id}`, 5, 15)) return { error: PW_LIMIT };
+  if (!user.passwordHash || !(await compare(String(f.get("password") ?? ""), user.passwordHash))) { await recordAttempt([`pwcheck:${user.id}`], false); return { error: "Password isn't right" }; }
   await cancelCardSubscription(org.id);
   await db.organization.update({ where: { id: org.id }, data: { closureRequestedAt: new Date(), billingStatus: "CANCELLED" } });
   await audit(org.id, user.id, "account.close.request");
@@ -165,6 +181,6 @@ export async function platformResetMfa(f: FormData) {
   const admin = await requirePlatformAdmin();
   const userId = String(f.get("userId") ?? "");
   const user = await db.user.update({ where: { id: userId }, data: { totpSecret: null, totpEnabledAt: null } });
-  await audit(user.organizationId, null, "platform.mfa.reset", { by: admin.name, user: user.name });
+  await audit(user.organizationId, null, "platform.mfa.reset", { by: admin.name, userId: user.id });
   revalidatePath(`/platform/${user.organizationId}`);
 }

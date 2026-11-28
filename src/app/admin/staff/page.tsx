@@ -2,7 +2,7 @@ import { requireAdmin } from "@/lib/server/auth";
 import { db } from "@/lib/server/db";
 import { PageHeader } from "@/components/admin";
 import { ActionForm } from "@/components/FormMessage";
-import { saveStaff } from "@/lib/server/actions/admin";
+import { eraseStaff, saveStaff } from "@/lib/server/actions/admin";
 
 export const metadata = { title: "Staff" };
 
@@ -45,6 +45,16 @@ export default async function Staff() {
                 <span className="badge bg-slate-100 text-slate-700">{u.role.toLowerCase()}</span>
               </summary>
               <ActionForm action={saveStaff} className="mt-4 space-y-3" submit="Save">{fields(u)}</ActionForm>
+              {u.id !== s.userId && (s.role === "OWNER" || (u.role !== "OWNER" && u.role !== "MANAGER")) && (
+                <details className="mt-4 border-t border-slate-100 pt-3 text-sm">
+                  <summary className="cursor-pointer text-red-700">Erase this person&apos;s personal data</summary>
+                  <p className="my-2 text-slate-600">For someone who has left and asked to be forgotten (UK GDPR). Their name, email, password and PIN are removed and they can&apos;t sign in. Their sales and shifts stay in your records as &quot;Former staff member&quot;. This can&apos;t be undone.</p>
+                  <ActionForm action={eraseStaff} className="flex flex-wrap items-start gap-2 [&>button]:w-auto [&>button]:bg-red-600" submit="Erase">
+                    <input type="hidden" name="id" value={u.id} />
+                    <input name="confirm" className="input w-40" placeholder="Type ERASE" aria-label="Type ERASE to confirm" required />
+                  </ActionForm>
+                </details>
+              )}
             </details>
           ))}
         </div>

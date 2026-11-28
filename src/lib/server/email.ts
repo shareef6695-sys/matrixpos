@@ -1,6 +1,7 @@
 import "server-only";
 import { headers } from "next/headers";
 import { COMPANY } from "@/components/PoweredBy";
+import { redact, safeError } from "@/lib/server/redact";
 
 export interface Email { to: string; subject: string; text: string; html?: string }
 
@@ -37,14 +38,22 @@ export async function sendEmail(e: Email): Promise<boolean> {
       await t.sendMail({ from: from(), to: e.to, subject: e.subject, text: e.text, html });
       return true;
     }
-    if (process.env.NODE_ENV !== "production" || process.env.EMAIL_LOG === "1") {
-      console.log(`\n[email to ${e.to}] ${e.subject}\n${e.text}\n`);
+    // Emails hold verification and password reset links. Only on your own computer (next dev) is the
+    // text printed with its links so you can click them. A preview deploy with EMAIL_LOG=1 prints it
+    // with links, emails and phone numbers masked, because Vercel keeps those logs. Never on the live site.
+    // The recipient address is never printed.
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`\n[email to [REDACTED]] ${e.subject}\n${e.text.replace(e.to, "[REDACTED]")}\n`);
+      return true;
+    }
+    if (process.env.EMAIL_LOG === "1" && process.env.VERCEL_ENV !== "production") {
+      console.log(`[email to [REDACTED]] ${e.subject}\n${redact(e.text)}`);
       return true;
     }
     console.error("Email not sent: set RESEND_API_KEY or SMTP_HOST");
     return false;
   } catch (err) {
-    console.error("Email failed", err);
+    console.error("Email failed", safeError(err));
     return false;
   }
 }

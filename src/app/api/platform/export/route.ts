@@ -2,10 +2,11 @@ import { isPlatformAdmin } from "@/lib/server/billing";
 import { platformShops } from "@/lib/server/platform";
 import { csv } from "@/lib/csv";
 import { planById } from "@/lib/plans";
+import { apiRoute } from "@/lib/server/errors";
 
 const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
 
-export async function GET() {
+export const GET = apiRoute("GET /api/platform/export", async () => {
   if (!(await isPlatformAdmin())) return new Response("Not found", { status: 404 });
   const rows = await platformShops();
   const body = csv([
@@ -16,4 +17,4 @@ export async function GET() {
   return new Response(body, {
     headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="matrixpos-customers-${day(new Date())}.csv"`, "cache-control": "no-store" },
   });
-}
+});

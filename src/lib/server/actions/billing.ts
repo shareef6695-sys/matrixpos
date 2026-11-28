@@ -11,6 +11,8 @@ import { appUrl } from "@/lib/server/email";
 import { seller } from "@/lib/legal";
 import { createBankInvoice, emailInvoice, markInvoicePaid, saveStripeInvoice } from "@/lib/server/invoices";
 import { priceFor, removeVatFromSubscription, stripe, stripeBillingEnabled, syncSubscription, vatRate } from "@/lib/server/stripe-billing";
+import { safeError } from "@/lib/server/redact";
+import { logError } from "@/lib/server/errors";
 
 const PLAN_IDS = PLANS.map((p) => p.id) as string[];
 
@@ -20,7 +22,7 @@ export async function requestPlan(_: FormState, f: FormData): Promise<FormState>
   const plan = String(f.get("plan") ?? "");
   const cycle = f.get("cycle") === "YEARLY" ? "YEARLY" : "MONTHLY";
   if (!PLAN_IDS.includes(plan)) return { error: "Choose a plan" };
-  await audit(s.orgId, s.userId, "billing.request", { plan, cycle, by: s.name });
+  await audit(s.orgId, s.userId, "billing.request", { plan, cycle });
   revalidatePath("/admin/billing");
   return { ok: `Thanks. We'll email you an invoice for ${planById(plan).name} (${cycle.toLowerCase()}) and switch your plan.` };
 }
@@ -154,8 +156,8 @@ export async function payByCard(_: FormState, f: FormData): Promise<FormState> {
     });
     url = session.url!;
   } catch (e) {
-    console.error("Stripe checkout failed", e);
-    return { error: `Card payment couldn't start: ${e instanceof Error ? e.message : "unknown error"}. Please try again, or request an invoice.` };
+    const ref = await logError("Stripe checkout", e);
+    return { error: `Card payment couldn't start. Please try again, or request an invoice. Error reference: ${ref}` };
   }
   redirect(url);
 }
@@ -170,7 +172,7 @@ export async function openCardPortal() {
     const portal = await stripe().billingPortal.sessions.create({ customer: org.stripeCustomerId, return_url: `${await appUrl()}/admin/billing` });
     url = portal.url;
   } catch (e) {
-    console.error("Stripe portal failed", e);
+    console.error("Stripe portal failed", safeError(e));
   }
   redirect(url);
 }
@@ -189,7 +191,7 @@ export async function platformInvoice(f: FormData) {
   else if (op === "sync") {
     await syncStripeInvoices(orgId);
     const org = await db.organization.findUnique({ where: { id: orgId } });
-    if (org?.stripeSubscriptionId && !seller().chargeVat) await removeVatFromSubscription(org.stripeSubscriptionId).catch((e) => console.error(e));
+    if (org?.stripeSubscriptionId && !seller().chargeVat) await removeVatFromSubscription(org.stripeSubscriptionId).catch((e) => console.error(safeError(e)));
   }
   else return;
   await audit(orgId, null, `platform.invoice.${op}`, { by: admin.name, invoiceId: id || undefined });

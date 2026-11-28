@@ -6,6 +6,7 @@ import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { planById } from "@/lib/plans";
 import { StatusBadge } from "./StatusBadge";
 import { stripeMode } from "@/lib/server/stripe-billing";
+import { setupChecks } from "@/lib/server/setup-check";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,14 @@ export default async function PlatformHome({ searchParams }: { searchParams: Pro
         </p>
       </div>
 
+      {setupChecks().some((c) => !c.ok) && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="mb-2 font-semibold">Finish setting up (Vercel → Settings → Environment Variables, then redeploy)</div>
+          <ul className="space-y-1">
+            {setupChecks().filter((c) => !c.ok).map((c) => <li key={c.label}><b>{c.label}:</b> {c.fix}</li>)}
+          </ul>
+        </div>
+      )}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Monthly revenue" value={formatGBP(mrr)} sub={`${paying} paying · ${formatGBP(mrr * 12)} a year`} />
         <Stat label="Businesses" value={String(shops.length)} sub={`${shopsTotal} shops · ${new7} new this week, ${new30} this month`} />

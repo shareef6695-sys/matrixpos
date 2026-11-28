@@ -5,6 +5,7 @@ import { TRIAL_DAYS } from "@/lib/plans";
 import { seller } from "@/lib/legal";
 import { LANDING_PAGES } from "@/lib/landing";
 import { JsonLd, homeJsonLd } from "@/lib/site";
+import { showDemoLogin } from "@/lib/server/demo";
 
 export const metadata = { alternates: { canonical: "/" } };
 
@@ -42,7 +43,7 @@ export default function Home() {
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href="/signup" className="btn-primary px-6 py-3 text-base">Create your shop</Link>
-          <Link href="/login" className="btn-secondary px-6 py-3 text-base">Try the demo</Link>
+          <Link href="/login" className="btn-secondary px-6 py-3 text-base">{showDemoLogin() ? "Try the demo" : "Sign in"}</Link>
         </div>
         <p className="mt-4 text-sm text-slate-500">From £12 a month. {TRIAL_DAYS}-day free trial, no card needed.</p>
       </section>

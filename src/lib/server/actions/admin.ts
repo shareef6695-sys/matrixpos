@@ -3,12 +3,20 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/server/db";
-import { requireAdmin, hash, compare } from "@/lib/server/auth";
+import { requireAdmin, hash, hashPin, compare, passwordProblem } from "@/lib/server/auth";
 import { nextCounter, audit } from "@/lib/server/till";
 import { postSaleVoid, postStockAdjustment } from "@/lib/server/accounting";
 import { parseGBP } from "@/lib/pos/money";
 import type { FormState } from "./auth";
+import { eraseStaffMember } from "@/lib/server/account";
 import { overLimit, clampFeatures } from "@/lib/server/billing";
+import { sealSecret } from "@/lib/server/secret-box";
+
+/** The public demo login is shared, so its staff logins and settings can't be changed. */
+async function demoBlocked(orgId: string) {
+  const o = await db.organization.findUnique({ where: { id: orgId }, select: { slug: true } });
+  return o?.slug === "demo-mart" ? "This can't be changed on the demo shop. Create your own shop to try it." : null;
+}
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const optional = (f: FormData, k: string) => str(f, k) || null;
@@ -230,6 +238,29 @@ export async function eraseCustomer(f: FormData) {
 
 // ---------------- Staff ----------------
 
+/**
+ * UK GDPR right to erasure for a staff member (e.g. someone who has left). Keeps their sales and shifts for the
+ * shop's records, under "Former staff member". Managers can erase cashiers and supervisors; only an owner can
+ * erase a manager or another owner. Nobody can erase themselves (an owner closes the account instead).
+ */
+export async function eraseStaff(_: FormState, f: FormData): Promise<FormState> {
+  const s = await requireAdmin();
+  const demo = await demoBlocked(s.orgId);
+  if (demo) return { error: demo };
+  const id = str(f, "id");
+  if (id === s.userId) return { error: "You can't erase yourself. An owner can close the whole account under Plan & billing." };
+  const u = await db.user.findFirst({ where: { id, organizationId: s.orgId }, select: { role: true } });
+  if (!u) return { error: "Staff member not found" };
+  if ((u.role === "OWNER" || u.role === "MANAGER") && s.role !== "OWNER") return { error: "Only an owner can erase a manager or owner" };
+  if (u.role === "OWNER" && (await db.user.count({ where: { organizationId: s.orgId, role: "OWNER", active: true, id: { not: id } } })) === 0)
+    return { error: "The business needs at least one other active owner first" };
+  if (str(f, "confirm").toUpperCase() !== "ERASE") return { error: "Type ERASE to confirm" };
+  await eraseStaffMember(s.orgId, id);
+  await audit(s.orgId, s.userId, "staff.erase", { staffId: id });
+  revalidatePath("/admin/staff");
+  return { ok: "Erased. Their sales are kept under \"Former staff member\"." };
+}
+
 async function pinInUse(orgId: string, pin: string, exceptId?: string | null) {
   const users = await db.user.findMany({ where: { organizationId: orgId, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { pinHash: true } });
   for (const u of users) if (await compare(pin, u.pinHash)) return true;
@@ -238,6 +269,8 @@ async function pinInUse(orgId: string, pin: string, exceptId?: string | null) {
 
 export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
   const s = await requireAdmin();
+  const demo = await demoBlocked(s.orgId);
+  if (demo) return { error: demo };
   const id = optional(f, "id");
   const role = str(f, "role") as "OWNER" | "MANAGER" | "SUPERVISOR" | "CASHIER";
   if (!["OWNER", "MANAGER", "SUPERVISOR", "CASHIER"].includes(role)) return { error: "Choose a role" };
@@ -252,6 +285,7 @@ export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
   if (pin && !/^\d{4,6}$/.test(pin)) return { error: "PIN must be 4 to 6 digits" };
   if (pin && (await pinInUse(s.orgId, pin, id))) return { error: "That PIN is already used by someone else. Each person needs their own." };
   if ((role === "OWNER" || role === "MANAGER") && email && !id && password.length < 8) return { error: "Back office password must be at least 8 characters" };
+  if (password && passwordProblem(password)) return { error: `Back office ${passwordProblem(password)!.toLowerCase()}` };
   if (email) {
     const other = await db.user.findUnique({ where: { email } });
     if (other && other.id !== id) return { error: "That email is already in use" };
@@ -260,7 +294,7 @@ export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
 
   const data = {
     name, role, email, active: id ? f.get("active") === "on" : true,
-    ...(pin ? { pinHash: await hash(pin) } : {}),
+    ...(pin ? { pinHash: await hashPin(pin) } : {}),
     ...(password ? { passwordHash: await hash(password) } : {}),
   };
   if (id) {
@@ -270,16 +304,19 @@ export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
     if (u.id === s.userId && role !== u.role) return { error: "You can't change your own role" };
     await db.$transaction([
       // A new email address has to be confirmed again.
-      db.user.update({ where: { id }, data: { ...data, ...(email !== u.email ? { emailVerifiedAt: null } : {}) } }),
+      // A new password signs them out on other devices; a new email address has to be confirmed again.
+      db.user.update({ where: { id }, data: { ...data, ...(password ? { sessionVersion: { increment: 1 } } : {}), ...(email !== u.email ? { emailVerifiedAt: null } : {}) } }),
       db.userStore.deleteMany({ where: { userId: id } }),
       db.userStore.createMany({ data: validStores.map((v) => ({ userId: id, storeId: v.id })) }),
     ]);
   } else {
     const limit = await overLimit(s.orgId, "staff");
     if (limit) return { error: limit };
-    await db.user.create({ data: { ...data, pinHash: data.pinHash!, organizationId: s.orgId, stores: { create: validStores.map((v) => ({ storeId: v.id })) } } });
+    const created = await db.user.create({ data: { ...data, pinHash: data.pinHash!, organizationId: s.orgId, stores: { create: validStores.map((v) => ({ storeId: v.id })) } }, select: { id: true } });
+    await audit(s.orgId, s.userId, "staff.create", { staffId: created.id, role });
   }
-  await audit(s.orgId, s.userId, id ? "staff.update" : "staff.create", { name, role });
+  // Audit entries refer to people by id, so erasing someone later doesn't leave their name behind.
+  if (id) await audit(s.orgId, s.userId, "staff.update", { staffId: id, role });
   revalidatePath("/admin/staff");
   return { ok: "Saved" };
 }
@@ -329,6 +366,8 @@ export async function saveRegister(f: FormData) {
 
 export async function saveSettings(_: FormState, f: FormData): Promise<FormState> {
   const s = await requireAdmin("OWNER");
+  const demo = await demoBlocked(s.orgId);
+  if (demo) return { error: demo };
   const on = (k: string) => f.get(k) === "on";
   const secret = (k: string) => {
     const v = str(f, k);
@@ -349,7 +388,7 @@ export async function saveSettings(_: FormState, f: FormData): Promise<FormState
       embeddedBarcodeMode: ["PRICE", "WEIGHT", "OFF"].includes(str(f, "embeddedBarcodeMode")) ? str(f, "embeddedBarcodeMode") : "PRICE",
       ageCheckThreshold: [21, 25].includes(parseInt(str(f, "ageCheckThreshold"), 10)) ? parseInt(str(f, "ageCheckThreshold"), 10) : 25,
       loyaltyPointsPerPound: Math.max(0, Math.min(100, parseInt(str(f, "loyaltyPointsPerPound"), 10) || 1)),
-      stripeSecretKey: secret("stripeSecretKey"), sumupApiKey: secret("sumupApiKey"), sumupMerchantCode: secret("sumupMerchantCode"), dojoApiKey: secret("dojoApiKey"),
+      stripeSecretKey: sealSecret(secret("stripeSecretKey")), sumupApiKey: sealSecret(secret("sumupApiKey")), sumupMerchantCode: secret("sumupMerchantCode"), dojoApiKey: sealSecret(secret("dojoApiKey")),
     }),
   });
   await audit(s.orgId, s.userId, "settings.update");

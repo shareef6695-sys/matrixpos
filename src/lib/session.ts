@@ -8,11 +8,17 @@ export const MFA_COOKIE = "mpos_mfa";
 
 export type Role = "OWNER" | "MANAGER" | "SUPERVISOR" | "CASHIER";
 
-export interface AdminSession { kind: "admin"; userId: string; orgId: string; role: Role; name: string }
+/**
+ * v is the user's sessionVersion when they signed in; bumping it signs them out everywhere.
+ * Session cookies are signed, not encrypted, so they carry ids and the role only: no names or emails.
+ * The person's name is read from the database on each request (see getAdmin).
+ */
+export interface AdminToken { kind: "admin"; userId: string; orgId: string; role: Role; v?: number }
+export interface AdminSession extends AdminToken { name: string }
 export interface DeviceSession { kind: "device"; orgId: string; storeId: string; registerId: string }
 /** Password was right; waiting for the two-step code. */
 export interface MfaSession { kind: "mfa"; userId: string; next: string }
-export interface TillSession { kind: "till"; userId: string; orgId: string; registerId: string; role: Role; name: string }
+export interface TillSession { kind: "till"; userId: string; orgId: string; registerId: string; role: Role }
 
 function key() {
   const s = process.env.AUTH_SECRET;
@@ -20,7 +26,7 @@ function key() {
   return new TextEncoder().encode(s);
 }
 
-export async function sign(payload: AdminSession | DeviceSession | TillSession | MfaSession, maxAgeSeconds: number) {
+export async function sign(payload: AdminToken | DeviceSession | TillSession | MfaSession, maxAgeSeconds: number) {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()

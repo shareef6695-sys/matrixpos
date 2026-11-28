@@ -3,11 +3,12 @@ import { getAdmin } from "@/lib/server/auth";
 import { atLeast } from "@/lib/session";
 import { londonRange, londonDate } from "@/lib/dates";
 import { csv } from "@/lib/csv";
+import { apiRoute } from "@/lib/server/errors";
 
 const p = (n: number | null | undefined) => (n == null ? "" : (n / 100).toFixed(2));
 const VAT = { STANDARD: "20", REDUCED: "5", ZERO: "0", EXEMPT: "exempt" } as const;
 
-export async function GET(req: Request) {
+export const GET = apiRoute("GET /api/admin/export", async (req: Request) => {
   const s = await getAdmin();
   if (!s || !atLeast(s.role, "MANAGER")) return new Response("Unauthorised", { status: 401 });
   const url = new URL(req.url);
@@ -28,5 +29,5 @@ export async function GET(req: Request) {
     name = `sales-${from}-to-${to}.csv`;
   } else return new Response("Unknown export", { status: 400 });
 
-  return new Response("﻿" + body, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${name}"` } });
-}
+  return new Response("﻿" + body, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "no-store" } });
+});
