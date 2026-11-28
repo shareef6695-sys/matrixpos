@@ -40,7 +40,7 @@ export async function deviceContext() {
 export async function userByPin(orgId: string, pin: string, storeId?: string) {
   if (!/^\d{4,6}$/.test(pin)) return null;
   const users = await db.user.findMany({
-    where: { organizationId: orgId, active: true, ...(storeId ? { OR: [{ stores: { some: { storeId } } }, { role: "OWNER" }] } : {}) },
+    where: { organizationId: orgId, active: true, hqMember: null, ...(storeId ? { OR: [{ stores: { some: { storeId } } }, { role: "OWNER" }] } : {}) },
   });
   for (const u of users) if (await compare(pin, u.pinHash)) return u;
   return null;

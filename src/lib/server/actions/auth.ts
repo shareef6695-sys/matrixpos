@@ -44,7 +44,7 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
     await recordAttempt(keys, false);
     return { error: "Email or password is incorrect." };
   }
-  const user = await db.user.findUnique({ where: { email } });
+  const user = await db.user.findUnique({ where: { email }, include: { hqMember: { select: { id: true } } } });
   if (!user?.passwordHash || !user.active || !(await compare(password, user.passwordHash))) {
     await recordAttempt(keys, false);
     return { error: "Email or password is incorrect." };
@@ -52,7 +52,9 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
   if (user.role === "CASHIER" || user.role === "SUPERVISOR")
     return { error: "This account can only sign in at the till with a PIN." };
   await recordAttempt(keys, true);
-  const next = safeNext(String(form.get("next") ?? ""));
+  let next = safeNext(String(form.get("next") ?? ""));
+  // HQ staff only have Matrix HQ, never a shop's back office.
+  if (user.hqMember && !next.startsWith("/platform")) next = "/platform/home";
 
   if (user.totpEnabledAt && user.totpSecret) {
     const t = await sign({ kind: "mfa", userId: user.id, next }, MFA_MAX_AGE);

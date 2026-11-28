@@ -1,7 +1,7 @@
 import "server-only";
 import { notFound, redirect } from "next/navigation";
 import { db } from "./db";
-import { getAdmin } from "./auth";
+import { getAdmin, signedInUser } from "./auth";
 import { accessFor, planById, PLAN_FEATURES, type PlanFeature } from "@/lib/plans";
 
 export async function orgAccess(orgId: string) {
@@ -24,7 +24,7 @@ export async function overLimit(orgId: string, kind: "store" | "register" | "sta
     if (n >= p.maxRegisters) return `The ${p.name} plan includes ${p.maxRegisters} tills. Upgrade your plan to add more.`;
   }
   if (kind === "staff" && p.maxStaff != null) {
-    const n = await db.user.count({ where: { organizationId: orgId, active: true } });
+    const n = await db.user.count({ where: { organizationId: orgId, active: true, hqMember: null } });
     if (n >= p.maxStaff) return `The ${p.name} plan includes ${p.maxStaff} staff. Upgrade your plan to add more.`;
   }
   return null;
@@ -62,7 +62,11 @@ export async function isPlatformAdmin() {
 /** The platform pages answer 404 to everyone else, so they can't be discovered. */
 export async function requirePlatformAdmin() {
   const s = await getAdmin();
-  if (!s) redirect("/login?next=/platform");
+  // HQ staff are signed in but aren't a shop user: they get the same 404 as everyone else.
+  if (!s) {
+    if (await signedInUser()) notFound();
+    redirect("/login?next=/platform");
+  }
   if (!(await isPlatformAdmin())) notFound();
   return s;
 }

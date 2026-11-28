@@ -14,7 +14,7 @@ const ROLE: Record<string, string> = {
 export default async function Staff() {
   const s = await requireAdmin();
   const [users, stores] = await Promise.all([
-    db.user.findMany({ where: { organizationId: s.orgId }, include: { stores: true }, orderBy: [{ active: "desc" }, { name: "asc" }] }),
+    db.user.findMany({ where: { organizationId: s.orgId, hqMember: null }, include: { stores: true }, orderBy: [{ active: "desc" }, { name: "asc" }] }),
     db.store.findMany({ where: { organizationId: s.orgId }, orderBy: { name: "asc" } }),
   ]);
   const fields = (u?: (typeof users)[number]) => (
