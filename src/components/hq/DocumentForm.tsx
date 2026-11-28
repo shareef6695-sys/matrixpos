@@ -8,7 +8,7 @@ export interface FormClient { id: string; name: string; currency: string; paymen
 interface Row { key: number; itemId: string | null; description: string; quantity: string; unit: string; discountPct: string; taxPct: string }
 
 export interface DocumentDefaults {
-  id?: string; clientId?: string; leadId?: string; title?: string; currency?: string; perGbp?: string;
+  id?: string; clientId?: string; leadId?: string; projectId?: string; title?: string; currency?: string; perGbp?: string;
   issueDate: string; endDate?: string; notes?: string; terms?: string;
   lines?: { itemId: string | null; description: string; quantity: string; unit: string; discountPct: string; taxPct: string }[];
 }
@@ -17,7 +17,9 @@ let nextKey = 1;
 const blank = (): Row => ({ key: nextKey++, itemId: null, description: "", quantity: "1", unit: "", discountPct: "", taxPct: "" });
 
 /** The quote / invoice editor. Totals here are a preview only: the server works every amount out again. */
-export function DocumentForm({ kind, action, clients, items, currencies, rates, chargeVat, defaults, extra }: {
+export function DocumentForm({ kind, action, clients, items, currencies, rates, chargeVat, defaults, extra, projects }: {
+  /** Open projects, so an invoice can be tied to one. */
+  projects?: { id: string; name: string; clientId: string | null }[];
   kind: "quote" | "invoice" | "recurring";
   /** More fields for the top card (the repeating invoice's schedule). */
   extra?: React.ReactNode;
@@ -86,6 +88,15 @@ export function DocumentForm({ kind, action, clients, items, currencies, rates, 
             ? <input name="perGbp" className="input" inputMode="decimal" defaultValue={defaults.perGbp} placeholder={rates[currency] ? `${rates[currency]} (latest saved)` : "Type a rate"} />
             : <input className="input bg-slate-50" value="Base currency" readOnly />}
         </div>
+        {kind === "invoice" && projects && projects.length > 0 && (
+          <div className="sm:col-span-2">
+            <label className="label">Project (optional)</label>
+            <select name="projectId" className="input" defaultValue={defaults.projectId ?? ""}>
+              <option value="">None</option>
+              {projects.filter((p) => !p.clientId || p.clientId === clientId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
         {extra}
       </div>
 

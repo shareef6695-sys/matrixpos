@@ -52,3 +52,35 @@ export const BILL_STATUS: Record<string, { label: string; cls: string }> = {
 };
 
 export const FREQUENCY_LABEL = { WEEKLY: "Every week", MONTHLY: "Every month", QUARTERLY: "Every 3 months", YEARLY: "Every year" } as const;
+
+// ---------------- Projects and contracts ----------------
+
+export const PROJECT_STATUS: Record<string, { label: string; cls: string }> = {
+  PLANNED: { label: "Planned", cls: "bg-slate-100 text-slate-700" },
+  ACTIVE: { label: "Active", cls: "bg-sky-100 text-sky-800" },
+  ON_HOLD: { label: "On hold", cls: "bg-amber-100 text-amber-800" },
+  DONE: { label: "Done", cls: "bg-emerald-100 text-emerald-800" },
+  CANCELLED: { label: "Cancelled", cls: "bg-slate-200 text-slate-600" },
+};
+export const BILLING_LABEL = { FIXED: "Fixed price", HOURLY: "Hourly", NONE: "Not billed" } as const;
+export const TASK_STATUS_LABEL = { TODO: "To do", DOING: "In progress", REVIEW: "Review", DONE: "Done" } as const;
+export const PRIORITY: Record<string, { label: string; cls: string }> = {
+  LOW: { label: "Low", cls: "bg-slate-100 text-slate-600" },
+  NORMAL: { label: "Normal", cls: "bg-slate-100 text-slate-700" },
+  HIGH: { label: "High", cls: "bg-amber-100 text-amber-800" },
+  URGENT: { label: "Urgent", cls: "bg-red-100 text-red-800" },
+};
+export const CONTRACT_KIND_LABEL = {
+  SUPPORT: "Support", HOSTING: "Hosting", MAINTENANCE: "Maintenance / care plan", LICENCE: "Third-party licence", DEVELOPMENT: "Development", SERVICE: "Service", OTHER: "Other",
+} as const;
+export const CONTRACT_STATUS: Record<string, { label: string; cls: string }> = {
+  DRAFT: { label: "Draft", cls: "bg-slate-100 text-slate-700" },
+  ACTIVE: { label: "Active", cls: "bg-emerald-100 text-emerald-800" },
+  ENDED: { label: "Ended", cls: "bg-slate-200 text-slate-600" },
+  CANCELLED: { label: "Cancelled", cls: "bg-slate-200 text-slate-600" },
+};
+export const RENEWAL: Record<string, { label: string; cls: string }> = {
+  upcoming: { label: "Renews soon", cls: "bg-sky-100 text-sky-800" },
+  due: { label: "Renewal due", cls: "bg-amber-100 text-amber-800" },
+  overdue: { label: "Ended, not renewed", cls: "bg-red-100 text-red-800" },
+};

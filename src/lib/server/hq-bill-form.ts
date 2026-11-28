@@ -4,10 +4,11 @@ import { accountOptions } from "./hq-forms";
 import { currencies } from "@/lib/hq/money";
 import { seller } from "@/lib/legal";
 
-export async function billFormData() {
-  const [opts, suppliers] = await Promise.all([
+export async function billFormData(alsoProject?: string | null) {
+  const [opts, suppliers, projects] = await Promise.all([
     accountOptions(),
     db.hqSupplier.findMany({ where: { archived: false }, orderBy: { name: "asc" }, select: { id: true, name: true, currency: true } }),
+    db.hqProject.findMany({ where: { OR: [{ status: { in: ["PLANNED", "ACTIVE", "ON_HOLD"] } }, ...(alsoProject ? [{ id: alsoProject }] : [])] }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
-  return { accounts: opts.nonBank, banks: opts.banks, suppliers, currencies: currencies(), chargeVat: seller().chargeVat };
+  return { projects, accounts: opts.nonBank, banks: opts.banks, suppliers, currencies: currencies(), chargeVat: seller().chargeVat };
 }

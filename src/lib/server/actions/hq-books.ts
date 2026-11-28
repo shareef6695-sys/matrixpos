@@ -202,7 +202,10 @@ export async function saveBill(_: FormState, f: FormData): Promise<FormState> {
     if ("error" in b) return { error: b.error };
     bankId = b.bank.id;
   }
+  const projectId = opt(f, "projectId", 40);
+  if (projectId && !(await db.hqProject.findUnique({ where: { id: projectId } }))) return { error: "Choose a project from the list" };
   const data = {
+    projectId,
     supplierId: supplier?.id ?? null, payee, reference: opt(f, "reference", 80), isExpense, date, dueDate, currency, perGbp: rate,
     netMinor: parsed.netMinor, taxMinor: parsed.taxMinor, totalMinor: parsed.totalMinor, notes: opt(f, "notes", 2000),
   };

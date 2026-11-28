@@ -6,7 +6,7 @@ import { Logo } from "@/components/Logo";
 import { logout } from "@/lib/server/actions/auth";
 
 export interface NavGroup { title: string | null; items: { href: string; label: string; icon: IconName }[] }
-export type IconName = "home" | "leads" | "clients" | "quotes" | "invoices" | "currencies" | "catalogue" | "team" | "shops" | "recurring" | "bank" | "bills" | "suppliers" | "books" | "reports";
+export type IconName = "home" | "leads" | "clients" | "quotes" | "invoices" | "currencies" | "catalogue" | "team" | "shops" | "recurring" | "bank" | "bills" | "suppliers" | "books" | "reports" | "projects" | "time" | "contracts";
 
 // Outline icons, 24x24, drawn with the current text colour.
 const ICONS: Record<IconName | "collapse" | "menu" | "close" | "logout", string> = {
@@ -25,6 +25,9 @@ const ICONS: Record<IconName | "collapse" | "menu" | "close" | "logout", string>
   suppliers: "M1 4h14v11H1zM15 8h4l3 3v4h-7M5.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4M18.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4",
   books: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5zM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5",
   reports: "M3 3v18h18M7 16v-5M12 16V7M17 16v-8",
+  projects: "M3 7h18v13H3zM8 7V4h8v3M3 12h18",
+  time: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20M12 6v6l4 2",
+  contracts: "M9 12l2 2 4-4M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2",
   collapse: "M15 6l-6 6 6 6",
   menu: "M4 6h16M4 12h16M4 18h16",
   logout: "M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3",

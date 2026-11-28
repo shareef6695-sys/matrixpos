@@ -7,13 +7,14 @@ import { seller } from "@/lib/legal";
 import { londonDate } from "@/lib/dates";
 
 /** What the quote and invoice editor needs: clients, catalogue, currencies and the latest rates. */
-export async function documentFormData() {
-  const [clients, items, rates] = await Promise.all([
+export async function documentFormData(alsoProject?: string | null) {
+  const [clients, items, rates, projects] = await Promise.all([
     db.hqClient.findMany({ where: { archived: false }, select: { id: true, name: true, currency: true, paymentDays: true }, orderBy: { name: "asc" } }),
     db.hqItem.findMany({ where: { active: true }, select: { id: true, name: true, description: true, currency: true, priceMinor: true, unit: true }, orderBy: { name: "asc" } }),
     latestRates(),
+    db.hqProject.findMany({ where: { OR: [{ status: { in: ["PLANNED", "ACTIVE", "ON_HOLD"] } }, ...(alsoProject ? [{ id: alsoProject }] : [])] }, select: { id: true, name: true, clientId: true }, orderBy: { name: "asc" } }),
   ]);
-  return { clients, items, rates, currencies: currencies(), chargeVat: seller().chargeVat };
+  return { clients, items, rates, projects, currencies: currencies(), chargeVat: seller().chargeVat };
 }
 
 export const linesForForm = (lines: HqLine[], currency: string) =>

@@ -10,9 +10,9 @@ Matrix HQ (`/platform`) is where Matrix Infotech Ltd. runs its own business, alo
 | Role | Can do |
 |---|---|
 | Manager | Every business module, but not HQ staff or POS shop customers |
-| Sales | Clients, leads and quotes. Sees invoices |
-| Accounts | Clients, invoices, payments, catalogue, exchange rates and the books (bank, bills, suppliers, journals, reports, lock date). Sees quotes |
-| Project staff | Sees clients and the catalogue (projects arrive in phase 3) |
+| Sales | Clients, leads, quotes, contracts and renewals. Sees invoices and projects |
+| Accounts | Clients, invoices, payments, catalogue, exchange rates, contracts and the books (bank, bills, suppliers, journals, reports, lock date). Sees quotes and projects |
+| Project staff | Projects, tasks and their own time. Sees clients, contracts and the catalogue, but no prices or invoices |
 | Read only | Sees the business modules and the books, changes nothing |
 
 Every HQ page and server action checks the role on the server (`requireHq` in `src/lib/server/hq.ts`, permissions in `src/lib/hq/roles.ts`). Anyone who isn't HQ gets a 404. HQ staff are users in the owner's account marked with an `HqMember` row: they can never open a shop's back office, sign in at a till (they have no usable PIN), appear on a shop's staff page, or count towards its plan's staff limit. Switching someone off signs them out everywhere at once.
@@ -50,6 +50,15 @@ A separate double-entry ledger for Matrix Infotech Ltd (`HqAccount`, `HqJournal`
 
 A live bank feed (Open Banking through a provider such as GoCardless Bank Account Data, TrueLayer or Plaid) can be added later; it would use the same reconciliation screen.
 
+## Projects, time and contracts (phase 3)
+
+- **Projects** belong to a client (or are internal) and are billed at a fixed price, by the hour, or not at all. Each has a task board (To do, In progress, Review, Done) with who it's for, priority, due date and an estimate. The project page shows hours against budget, unbilled time, what's been invoiced and, with bills marked for the project, the profit so far. Invoices and bills can be tied to a project.
+- **Time:** start a timer (one per person; over 12 hours is capped as left running) or log time afterwards (`1:30`, `2h`, `45m`). The weekly timesheet shows anyone's week to those who can see projects. Project staff can move their own tasks along.
+- **Invoice the time:** on an hourly project, *Make draft invoice* puts the unbilled hours up to a date on a draft invoice at the hourly rate, one line per task or per entry. Deleting or voiding that invoice frees the time to be invoiced again; billed time can't be deleted.
+- **Contracts and renewals:** support and care plans, hosting, development retainers and resold third-party licences, with start and end dates, value and cost per term, and an optional link to the repeating invoice that bills it. The daily cron gives contracts that renew themselves their next term once they end, and emails the first `PLATFORM_ADMIN_EMAILS` address once per end date when a contract enters its reminder period. Others are renewed with one click.
+
+Pure logic (durations, time-to-invoice lines, renewal dates) is in `src/lib/hq/projects.ts` and unit tested.
+
 ## Coming next
 
-Phase 3 (projects, tasks, time tracking, contracts and renewals) and phase 4 (VAT registration and Making Tax Digital, year-end).
+Phase 4: VAT registration and Making Tax Digital, and year-end.
