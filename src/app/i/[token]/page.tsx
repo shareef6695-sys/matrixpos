@@ -15,7 +15,7 @@ export default async function PublicInvoice({ params }: { params: Promise<{ toke
   if (!inv || inv.status === "DRAFT") notFound();
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-6 print:bg-white print:p-0">
-      <div className="mx-auto mb-4 flex max-w-3xl justify-end print:hidden"><PrintButton /></div>
+      <div className="mx-auto mb-4 flex max-w-3xl justify-end gap-2 print:hidden"><a href={`/api/doc/invoice/${token}?download=1`} className="btn-secondary">Download PDF</a><PrintButton label="Print" /></div>
       <HqDocument d={{
         kind: "invoice", number: inv.number, title: inv.title, status: inv.status, currency: inv.currency, issueDate: inv.issueDate, endDate: inv.dueDate,
         subtotalMinor: inv.subtotalMinor, discountMinor: inv.discountMinor, taxMinor: inv.taxMinor, totalMinor: inv.totalMinor, paidMinor: inv.paidMinor,

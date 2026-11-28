@@ -34,6 +34,7 @@ export default async function PublicQuote({ params }: { params: Promise<{ token:
               <button name="answer" value="accept" className="btn-primary">Accept quote</button>
             </form>
           )}
+          <a href={`/api/doc/quote/${token}?download=1`} className="btn-secondary">Download PDF</a>
           <PrintButton label="Print" />
         </div>
       </div>

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { COMPANY } from "@/components/PoweredBy";
 import { redact, safeError } from "@/lib/server/redact";
 
-export interface Email { to: string; subject: string; text: string; html?: string }
+export interface Email { to: string; subject: string; text: string; html?: string; attachments?: { filename: string; content: Uint8Array; contentType: string }[] }
 
 /** Which way email is sent: Resend's API, any SMTP mailbox (Zoho, Hostinger, Microsoft 365, Gmail...), or nowhere. */
 export function emailMode() {
@@ -23,7 +23,7 @@ export async function sendEmail(e: Email): Promise<boolean> {
       const r = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from: from(), to: [e.to], subject: e.subject, text: e.text, html }),
+        body: JSON.stringify({ from: from(), to: [e.to], subject: e.subject, text: e.text, html, ...(e.attachments?.length ? { attachments: e.attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString("base64"), content_type: a.contentType })) } : {}) }),
       });
       if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text()}`);
       return true;
@@ -35,7 +35,7 @@ export async function sendEmail(e: Email): Promise<boolean> {
         host: process.env.SMTP_HOST, port, secure: port === 465,
         auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } : undefined,
       });
-      await t.sendMail({ from: from(), to: e.to, subject: e.subject, text: e.text, html });
+      await t.sendMail({ from: from(), to: e.to, subject: e.subject, text: e.text, html, attachments: e.attachments?.map((a) => ({ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType })) });
       return true;
     }
     // Emails hold verification and password reset links. Only on your own computer (next dev) is the
@@ -43,7 +43,7 @@ export async function sendEmail(e: Email): Promise<boolean> {
     // with links, emails and phone numbers masked, because Vercel keeps those logs. Never on the live site.
     // The recipient address is never printed.
     if (process.env.NODE_ENV !== "production") {
-      console.log(`\n[email to [REDACTED]] ${e.subject}\n${e.text.replace(e.to, "[REDACTED]")}\n`);
+      console.log(`\n[email to [REDACTED]] ${e.subject}${e.attachments?.length ? ` (attached: ${e.attachments.map((a) => `${a.filename}, ${a.content.length} bytes`).join("; ")})` : ""}\n${e.text.replace(e.to, "[REDACTED]")}\n`);
       return true;
     }
     if (process.env.EMAIL_LOG === "1" && process.env.VERCEL_ENV !== "production") {
