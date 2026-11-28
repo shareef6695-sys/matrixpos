@@ -131,3 +131,9 @@ Test with sandbox keys before taking real payments. Integrated card payments nee
 - Keep the VPS updated (`sudo apt update && sudo apt upgrade`) and use SSH keys rather than passwords.
 - Card numbers never touch MatrixPOS: card data stays inside the card terminal, which keeps your PCI DSS scope small.
 - Register with the ICO if you hold customer personal data for loyalty or marketing.
+
+## Preview deploys and monitoring
+
+- Preview deploys (pull requests) never run database migrations, so they can't change the live database. Only Production deploys migrate. A preview still needs `DATABASE_URL` set for Preview to show real pages.
+- `GET /api/health` returns 200 when the app can reach the database and 503 when it can't. Point an uptime monitor (for example UptimeRobot) at `https://pos.matrixinfo.co.uk/api/health`.
+- The HQ dashboard lists any missing live settings (email, APP_URL, CRON_SECRET, bank details, Stripe webhook).

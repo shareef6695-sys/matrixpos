@@ -85,10 +85,10 @@ export const saleSchema = z.object({
     netPence: z.number().int(),
     vatCode,
     vatRate: z.number().int(),
-    promotionName: z.string().nullish(),
+    promotionName: z.string().max(200).nullish(),
   })).min(1).max(500),
-  vat: z.array(z.object({ vatCode, vatRate: z.number().int(), grossPence: z.number().int(), vatPence: z.number().int() })),
-  payments: z.array(z.object({ method: payMethod, amountPence: z.number().int(), reference: z.string().max(120).nullish() })).min(1),
+  vat: z.array(z.object({ vatCode, vatRate: z.number().int(), grossPence: z.number().int(), vatPence: z.number().int() })).max(10),
+  payments: z.array(z.object({ method: payMethod, amountPence: z.number().int(), reference: z.string().max(120).nullish() })).min(1).max(20),
 });
 export type SalePayload = z.infer<typeof saleSchema>;
 
