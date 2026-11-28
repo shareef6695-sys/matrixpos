@@ -15,9 +15,17 @@ const NAV: { title: string | null; items: [string, string, IconName, HqPermissio
   ] },
   { title: "Money", items: [
     ["/platform/invoices", "Invoices", "invoices", "invoices.view"],
-    ["/platform/currencies", "Currencies", "currencies", "invoices.view"],
+    ["/platform/recurring", "Repeating invoices", "recurring", "invoices.view"],
+    ["/platform/bills", "Bills & expenses", "bills", "accounts.view"],
+    ["/platform/suppliers", "Suppliers", "suppliers", "accounts.view"],
+    ["/platform/bank", "Bank", "bank", "accounts.view"],
+  ] },
+  { title: "Accounts", items: [
+    ["/platform/accounts", "Books", "books", "accounts.view"],
+    ["/platform/accounts/reports", "Reports", "reports", "accounts.view"],
   ] },
   { title: "Setup", items: [
+    ["/platform/currencies", "Currencies", "currencies", "invoices.view"],
     ["/platform/catalogue", "Catalogue", "catalogue", "catalogue.view"],
     ["/platform/team", "HQ staff", "team", "team.manage"],
   ] },

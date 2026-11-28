@@ -4,7 +4,9 @@ import { formatMoney } from "@/lib/hq/money";
 
 export interface DocLine { id: string; description: string; quantity: unknown; unitMinor: number; discountPct: unknown; taxPct: unknown; amountMinor: number }
 export interface DocData {
-  kind: "quote" | "invoice";
+  kind: "quote" | "invoice" | "credit";
+  /** A credit note: the invoice it is against. */
+  against?: string;
   number: string; title: string | null; status: string; currency: string;
   issueDate: Date; endDate: Date | null;
   subtotalMinor: number; discountMinor: number; taxMinor: number; totalMinor: number; paidMinor?: number;
@@ -22,7 +24,7 @@ export function HqDocument({ d }: { d: DocData }) {
   const due = d.totalMinor - (d.paidMinor ?? 0);
   const anyDiscount = d.lines.some((l) => Number(l.discountPct) > 0);
   const anyTax = d.lines.some((l) => Number(l.taxPct) > 0);
-  const heading = d.kind === "quote" ? "Quote" : paid ? "Receipt" : d.status === "VOID" ? "Invoice (cancelled)" : "Invoice";
+  const heading = d.kind === "credit" ? (d.status === "VOID" ? "Credit note (cancelled)" : "Credit note") : d.kind === "quote" ? "Quote" : paid ? "Receipt" : d.status === "VOID" ? "Invoice (cancelled)" : "Invoice";
   return (
     <div className="mx-auto max-w-3xl bg-white p-8 text-sm text-slate-800 shadow-sm ring-1 ring-slate-200 print:max-w-none print:p-0 print:shadow-none print:ring-0">
       <div className="flex flex-wrap items-start justify-between gap-6">
@@ -37,12 +39,13 @@ export function HqDocument({ d }: { d: DocData }) {
           <div className="text-2xl font-bold tracking-tight">{heading}</div>
           <div className="mt-1 font-mono">{d.number}</div>
           <div className="mt-3">Date: {fmtDate(d.issueDate)}</div>
+          {d.against && <div>Against invoice: <span className="font-mono">{d.against}</span></div>}
           {d.endDate && <div>{d.kind === "quote" ? "Valid until" : "Due"}: {fmtDate(d.endDate)}</div>}
         </div>
       </div>
 
       <div className="mt-8">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{d.kind === "quote" ? "Prepared for" : "Bill to"}</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{d.kind === "quote" ? "Prepared for" : d.kind === "credit" ? "Credited to" : "Bill to"}</div>
         <div className="mt-1 font-semibold">{d.billToName}</div>
         {d.billToAddress && <div>{d.billToAddress}</div>}
         {d.billToEmail && <div>{d.billToEmail}</div>}
@@ -79,7 +82,7 @@ export function HqDocument({ d }: { d: DocData }) {
             <tr><td className="pr-6 text-right">Discount</td><td className="text-right">-{formatMoney(d.discountMinor, d.currency)}</td></tr>
           </>}
           {d.taxMinor > 0 && <tr><td className="pr-6 text-right">VAT</td><td className="text-right">{formatMoney(d.taxMinor, d.currency)}</td></tr>}
-          <tr className="text-base font-bold"><td className="pr-6 pt-2 text-right">Total ({d.currency})</td><td className="pt-2 text-right">{formatMoney(d.totalMinor, d.currency)}</td></tr>
+          <tr className="text-base font-bold"><td className="pr-6 pt-2 text-right">{d.kind === "credit" ? "Total credited" : "Total"} ({d.currency})</td><td className="pt-2 text-right">{formatMoney(d.totalMinor, d.currency)}</td></tr>
           {d.kind === "invoice" && (d.paidMinor ?? 0) > 0 && <>
             <tr><td className="pr-6 text-right">Paid</td><td className="text-right">-{formatMoney(d.paidMinor!, d.currency)}</td></tr>
             <tr className="font-bold"><td className="pr-6 text-right">Left to pay</td><td className="text-right">{formatMoney(due, d.currency)}</td></tr>

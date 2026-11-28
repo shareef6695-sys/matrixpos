@@ -11,9 +11,9 @@ Matrix HQ (`/platform`) is where Matrix Infotech Ltd. runs its own business, alo
 |---|---|
 | Manager | Every business module, but not HQ staff or POS shop customers |
 | Sales | Clients, leads and quotes. Sees invoices |
-| Accounts | Clients, invoices, payments, catalogue and exchange rates. Sees quotes |
+| Accounts | Clients, invoices, payments, catalogue, exchange rates and the books (bank, bills, suppliers, journals, reports, lock date). Sees quotes |
 | Project staff | Sees clients and the catalogue (projects arrive in phase 3) |
-| Read only | Sees the business modules, changes nothing |
+| Read only | Sees the business modules and the books, changes nothing |
 
 Every HQ page and server action checks the role on the server (`requireHq` in `src/lib/server/hq.ts`, permissions in `src/lib/hq/roles.ts`). Anyone who isn't HQ gets a 404. HQ staff are users in the owner's account marked with an `HqMember` row: they can never open a shop's back office, sign in at a till (they have no usable PIN), appear on a shop's staff page, or count towards its plan's staff limit. Switching someone off signs them out everywhere at once.
 
@@ -33,6 +33,23 @@ No VAT is charged while `CHARGE_VAT` is off. Once Matrix Infotech registers for 
 
 `/q/<token>` and `/i/<token>` use a 256-bit random token as the only key. They are never indexed, never send a referrer, and never show drafts. Accepting or declining a quote is rate limited per connection.
 
+## Accounts (phase 2)
+
+A separate double-entry ledger for Matrix Infotech Ltd (`HqAccount`, `HqJournal`, `HqJournalLine`), in GBP pence, never mixed with any shop's books. The pure maths is in `src/lib/hq/books.ts` (unit tested); posting is in `src/lib/server/hq-books.ts`.
+
+- **Automatic posting.** Sending an invoice posts it (Dr debtors, Cr income per line); voiding posts a reversal on the void date. Payments, credit notes, bills, bill payments and bank lines post as they're saved. Each document posts once (`@@unique([source, sourceId])`). Changing a sent invoice or deleting a payment removes and re-posts its entry. Opening *Books* brings in anything not yet posted, so invoices and payments from before phase 2 are included.
+- **Income accounts.** Each catalogue item can name its income account; otherwise POS plans go to 4020, third-party apps to 4030, support plans to 4040 and the rest to 4000.
+- **Currencies.** Debtors and creditors are cleared at the document's rate; the bank gets what actually arrived at the rate on the day; the difference goes to 7900 Exchange gains and losses. A bank account can be in any currency; its lines keep the amount in that currency too.
+- **Bills and expenses.** A bill is paid later (record the payment, or match it from the bank). An expense is paid as it's saved, from the bank account chosen. Suppliers are optional.
+- **Credit notes** (`MPC-YEAR-CODE`) reduce what's left to pay on an invoice, spread over its lines. Voiding one reopens the invoice.
+- **Repeating invoices** are made by the daily cron (`/api/cron/daily`) on their date, as drafts or emailed automatically. *Make any due now* runs it by hand.
+- **Bank.** Upload a CSV statement (Lloyds' layout and any bank with Date plus Amount or Paid in / Paid out columns, `src/lib/hq/bank-csv.ts`). The same line is never imported twice. Each line can be matched to an entry already in the books (same amount within 10 days), recorded as a payment for an open invoice or bill, put straight to an account (fees, subscriptions, interest), or ignored.
+- **Manual journals** for opening balances, the director's loan, depreciation and year-end adjustments. Bank accounts in a foreign currency can't be used in a manual journal.
+- **Reports:** profit and loss (cost of sales and overheads), balance sheet, cash flow, trial balance, aged debtors and aged creditors. All printable.
+- **Lock date.** Nothing dated on or before it can be added, changed or removed. Only the owner can unlock or move it back.
+
+A live bank feed (Open Banking through a provider such as GoCardless Bank Account Data, TrueLayer or Plaid) can be added later; it would use the same reconciliation screen.
+
 ## Coming next
 
-Phase 2 (full accounts: ledger, bank import and reconciliation, expenses and bills, credit notes, recurring invoices, exchange gains and losses, P&L, balance sheet, lock dates), phase 3 (projects, tasks, time tracking, contracts and renewals) and phase 4 (VAT registration and Making Tax Digital, year-end).
+Phase 3 (projects, tasks, time tracking, contracts and renewals) and phase 4 (VAT registration and Making Tax Digital, year-end).

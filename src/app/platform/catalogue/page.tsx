@@ -3,13 +3,14 @@ import { requireHq } from "@/lib/server/hq";
 import { PageHeader } from "@/components/admin";
 import { ActionForm } from "@/components/FormMessage";
 import { saveItem, loadStarterCatalogue } from "@/lib/server/actions/hq-crm";
+import { accountOptions } from "@/lib/server/hq-forms";
 import { currencies, formatMoney, minorToInput } from "@/lib/hq/money";
 import { ITEM_KIND_LABEL } from "@/lib/hq/labels";
 import type { HqItem } from "@prisma/client";
 
 export const metadata = { title: "Catalogue" };
 
-function Fields({ i, list }: { i?: HqItem; list: string[] }) {
+function Fields({ i, list, income }: { i?: HqItem; list: string[]; income: { id: string; code: string; name: string }[] }) {
   return (
     <>
       {i && <input type="hidden" name="id" value={i.id} />}
@@ -23,6 +24,7 @@ function Fields({ i, list }: { i?: HqItem; list: string[] }) {
         <div><label className="label">Your cost (optional)</label><input name="cost" className="input" inputMode="decimal" defaultValue={i?.costMinor != null ? minorToInput(i.costMinor, i.currency) : ""} /></div>
         <div><label className="label">Vendor (third-party)</label><input name="vendor" className="input" defaultValue={i?.vendor ?? ""} /></div>
         <div><label className="label">Web page</label><input name="url" className="input" defaultValue={i?.url ?? ""} placeholder="https://" /></div>
+        <div className="sm:col-span-2"><label className="label">Sales go to (in the books)</label><select name="incomeAccountId" className="input" defaultValue={i?.incomeAccountId ?? ""}><option value="">By type (automatic)</option>{income.map((a) => <option key={a.id} value={a.id}>{a.code} {a.name}</option>)}</select></div>
         <div className="sm:col-span-2"><label className="label">Description (goes on quotes and invoices)</label><textarea name="description" className="input min-h-16" defaultValue={i?.description ?? ""} /></div>
         {i && <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="active" defaultChecked={i.active} /> For sale</label>}
       </div>
@@ -35,6 +37,7 @@ export default async function Catalogue() {
   const edit = h.can("catalogue.edit");
   const items = await db.hqItem.findMany({ orderBy: [{ active: "desc" }, { kind: "asc" }, { name: "asc" }] });
   const list = currencies();
+  const income = edit ? (await accountOptions()).all.filter((a) => a.type === "INCOME") : [];
   return (
     <div>
       <PageHeader title="Catalogue" sub="Everything you sell: custom builds, services, subscriptions and third-party apps. Pick these on quotes and invoices." />
@@ -47,7 +50,7 @@ export default async function Catalogue() {
                 <span className="tabular-nums">{i.priceMinor ? `${formatMoney(i.priceMinor, i.currency)} / ${i.unit}` : "Quoted"}</span>
               </summary>
               {i.description && <p className="mt-2 text-sm text-slate-600">{i.description}</p>}
-              {edit && <ActionForm action={saveItem} className="mt-4 space-y-3" submit="Save"><Fields i={i} list={list} /></ActionForm>}
+              {edit && <ActionForm action={saveItem} className="mt-4 space-y-3" submit="Save"><Fields i={i} list={list} income={income} /></ActionForm>}
             </details>
           ))}
           {!items.length && (
@@ -61,7 +64,7 @@ export default async function Catalogue() {
           <div className="space-y-4">
             <div className="card h-fit">
               <h2 className="mb-3 font-semibold">Add an item</h2>
-              <ActionForm action={saveItem} className="space-y-3" submit="Add" reset><Fields list={list} /></ActionForm>
+              <ActionForm action={saveItem} className="space-y-3" submit="Add" reset><Fields list={list} income={income} /></ActionForm>
             </div>
             {items.length > 0 && (
               <form action={loadStarterCatalogue} className="card text-sm">

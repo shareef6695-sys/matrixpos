@@ -6,7 +6,7 @@ import { Logo } from "@/components/Logo";
 import { logout } from "@/lib/server/actions/auth";
 
 export interface NavGroup { title: string | null; items: { href: string; label: string; icon: IconName }[] }
-export type IconName = "home" | "leads" | "clients" | "quotes" | "invoices" | "currencies" | "catalogue" | "team" | "shops";
+export type IconName = "home" | "leads" | "clients" | "quotes" | "invoices" | "currencies" | "catalogue" | "team" | "shops" | "recurring" | "bank" | "bills" | "suppliers" | "books" | "reports";
 
 // Outline icons, 24x24, drawn with the current text colour.
 const ICONS: Record<IconName | "collapse" | "menu" | "close" | "logout", string> = {
@@ -19,6 +19,12 @@ const ICONS: Record<IconName | "collapse" | "menu" | "close" | "logout", string>
   catalogue: "M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8",
   team: "M15 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M8.5 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M19 8v6M22 11h-6",
   shops: "M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6",
+  recurring: "M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3",
+  bank: "M3 10h18L12 4zM5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18",
+  bills: "M6 2h9l5 5v15H6zM15 2v5h5M9 13h6M9 17h6",
+  suppliers: "M1 4h14v11H1zM15 8h4l3 3v4h-7M5.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4M18.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4",
+  books: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5zM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5",
+  reports: "M3 3v18h18M7 16v-5M12 16V7M17 16v-8",
   collapse: "M15 6l-6 6 6 6",
   menu: "M4 6h16M4 12h16M4 18h16",
   logout: "M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3",
@@ -48,7 +54,11 @@ export function HqShell({ groups, who, isOwner, initialCollapsed, children }: {
     // Only a layout preference, so a plain cookie is fine (no personal data).
     document.cookie = `hq_nav=${next ? "collapsed" : "open"}; path=/platform; max-age=31536000; samesite=lax`;
   };
-  const active = (href: string) => (href === "/platform" ? path === href || /^\/platform\/c[a-z0-9]{20,}$/.test(path) : path.startsWith(href));
+  // The most specific link wins, so Reports (under Books) doesn't light up Books too.
+  const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
+  const under = (href: string) => path === href || path.startsWith(`${href}/`);
+  const active = (href: string) => (href === "/platform" ? path === href || /^\/platform\/c[a-z0-9]{20,}$/.test(path)
+    : under(href) && !hrefs.some((o) => o.length > href.length && o.startsWith(href) && under(o)));
 
   const nav = (compact: boolean, onPick?: () => void) => (
     <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-3">

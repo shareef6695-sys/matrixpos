@@ -801,20 +801,22 @@ enum HqItemKind {
  * Everything Matrix Infotech sells.
  */
 model HqItem {
-  id          String     @id @default(cuid())
-  name        String
-  sku         String?    @unique
-  kind        HqItemKind @default(SERVICE)
-  description String?
-  unit        String     @default("each") // each, hour, day, month, year
-  currency    String     @default("GBP")
-  priceMinor  Int        @default(0)
-  costMinor   Int? // what it costs you (for third-party items)
-  vendor      String? // who supplies a third-party item
-  url         String? // the page on your website
-  active      Boolean    @default(true)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id              String     @id @default(cuid())
+  name            String
+  sku             String?    @unique
+  kind            HqItemKind @default(SERVICE)
+  description     String?
+  unit            String     @default("each") // each, hour, day, month, year
+  currency        String     @default("GBP")
+  priceMinor      Int        @default(0)
+  costMinor       Int? // what it costs you (for third-party items)
+  vendor          String? // who supplies a third-party item
+  url             String? // the page on your website
+  incomeAccount   HqAccount? @relation(fields: [incomeAccountId], references: [id], onDelete: SetNull)
+  incomeAccountId String? // where sales of it go in the books (blank = by type)
+  active          Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   lines HqLine[]
 }
@@ -841,11 +843,12 @@ model HqClient {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  contacts HqContact[]
-  leads    HqLead[]
-  quotes   HqQuote[]
-  invoices HqInvoice[]
-  notesLog HqNote[]
+  contacts  HqContact[]
+  leads     HqLead[]
+  quotes    HqQuote[]
+  invoices  HqInvoice[]
+  notesLog  HqNote[]
+  recurring HqRecurring[]
 
   @@index([name])
 }
@@ -1009,8 +1012,11 @@ model HqInvoice {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  lines    HqLine[]
-  payments HqPayment[]
+  lines         HqLine[]
+  payments      HqPayment[]
+  creditNotes   HqCreditNote[]
+  hqRecurring   HqRecurring?   @relation(fields: [hqRecurringId], references: [id])
+  hqRecurringId String?
 
   @@index([status, dueDate])
   @@index([issueDate])
@@ -1020,39 +1026,275 @@ model HqInvoice {
  * A line on a quote or an invoice.
  */
 model HqLine {
-  id          String     @id @default(cuid())
-  quote       HqQuote?   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  quoteId     String?
-  invoice     HqInvoice? @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  invoiceId   String?
-  item        HqItem?    @relation(fields: [itemId], references: [id], onDelete: SetNull)
-  itemId      String?
-  position    Int        @default(0)
-  description String
-  quantity    Decimal    @db.Decimal(12, 3)
-  unitMinor   Int
-  discountPct Decimal    @default(0) @db.Decimal(5, 2)
-  taxPct      Decimal    @default(0) @db.Decimal(5, 2)
-  amountMinor Int // after discount, before tax
+  id           String        @id @default(cuid())
+  quote        HqQuote?      @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId      String?
+  invoice      HqInvoice?    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId    String?
+  creditNote   HqCreditNote? @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  creditNoteId String?
+  item         HqItem?       @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  itemId       String?
+  position     Int           @default(0)
+  description  String
+  quantity     Decimal       @db.Decimal(12, 3)
+  unitMinor    Int
+  discountPct  Decimal       @default(0) @db.Decimal(5, 2)
+  taxPct       Decimal       @default(0) @db.Decimal(5, 2)
+  amountMinor  Int // after discount, before tax
 
   @@index([quoteId])
   @@index([invoiceId])
+  @@index([creditNoteId])
 }
 
 model HqPayment {
-  id          String    @id @default(cuid())
-  invoice     HqInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  invoiceId   String
-  date        DateTime
-  amountMinor Int // in the invoice's currency
-  perGbp      Decimal   @default(1) @db.Decimal(18, 8) // rate on the day it was received
-  gbpPence    Int
-  method      String    @default("BANK") // BANK, CARD, CASH, PAYPAL, STRIPE, CHEQUE, OTHER
-  reference   String?
-  notes       String?
-  userId      String?
-  createdAt   DateTime  @default(now())
+  id            String        @id @default(cuid())
+  invoice       HqInvoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId     String
+  date          DateTime
+  amountMinor   Int // in the invoice's currency
+  perGbp        Decimal       @default(1) @db.Decimal(18, 8) // rate on the day it was received
+  gbpPence      Int
+  method        String        @default("BANK") // BANK, CARD, CASH, PAYPAL, STRIPE, CHEQUE, OTHER, CREDIT_NOTE
+  bankAccountId String? // which bank account it went into (blank = the main bank account)
+  creditNote    HqCreditNote? @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  creditNoteId  String?       @unique // set when this "payment" is a credit note applied to the invoice
+  reference     String?
+  notes         String?
+  userId        String?
+  createdAt     DateTime      @default(now())
 
   @@index([invoiceId])
   @@index([date])
+}
+
+// ---------------- Matrix HQ: the books (phase 2) ----------------
+// Matrix Infotech's own double-entry ledger, separate from any shop's. Journal amounts are GBP pence;
+// lines on bank accounts also keep the amount in the bank account's own currency.
+
+model HqAccount {
+  id          String      @id @default(cuid())
+  code        String      @unique
+  name        String
+  type        AccountType
+  systemKey   String?     @unique // DEBTORS, CREDITORS, SALES, FX... used by automatic postings
+  isBank      Boolean     @default(false)
+  currency    String      @default("GBP") // for bank accounts
+  description String?
+  archived    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+
+  lines    HqJournalLine[]
+  bankTxns HqBankTxn[]
+  items    HqItem[]
+}
+
+model HqJournal {
+  id        String   @id @default(cuid())
+  date      DateTime
+  source    String // INVOICE, INVOICE_VOID, PAYMENT, CREDIT_NOTE, BILL, BILL_VOID, BILL_PAYMENT, BANK, MANUAL
+  sourceId  String?
+  reference String?
+  memo      String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  lines   HqJournalLine[]
+  bankTxn HqBankTxn?
+
+  @@unique([source, sourceId])
+  @@index([date])
+}
+
+model HqJournalLine {
+  id           String    @id @default(cuid())
+  journal      HqJournal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  journalId    String
+  account      HqAccount @relation(fields: [accountId], references: [id])
+  accountId    String
+  debitPence   Int       @default(0)
+  creditPence  Int       @default(0)
+  description  String?
+  foreignMinor Int? // bank lines: signed amount in the bank account's currency (+ in, - out)
+
+  @@index([accountId])
+}
+
+/**
+ * One row: the books' settings.
+ */
+model HqSettings {
+  id        String    @id @default("hq")
+  lockDate  DateTime? // nothing dated on or before this can be added, changed or removed
+  updatedAt DateTime  @updatedAt
+}
+
+model HqSupplier {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  vatNumber String?
+  currency  String   @default("GBP")
+  notes     String?
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  bills HqBill[]
+}
+
+enum HqBillStatus {
+  OPEN
+  PARTIAL
+  PAID
+  VOID
+}
+
+/**
+ * A supplier bill, or an expense (a bill paid on the spot).
+ */
+model HqBill {
+  id          String       @id @default(cuid())
+  supplier    HqSupplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierId  String?
+  payee       String // as on the bill or receipt
+  reference   String? // their invoice number
+  isExpense   Boolean      @default(false)
+  status      HqBillStatus @default(OPEN)
+  date        DateTime
+  dueDate     DateTime
+  currency    String       @default("GBP")
+  perGbp      Decimal      @default(1) @db.Decimal(18, 8)
+  netMinor    Int
+  taxMinor    Int          @default(0)
+  totalMinor  Int
+  paidMinor   Int          @default(0)
+  notes       String?
+  voidedAt    DateTime?
+  createdById String?
+  createdAt   DateTime     @default(now())
+
+  lines    HqBillLine[]
+  payments HqBillPayment[]
+
+  @@index([status, dueDate])
+  @@index([date])
+}
+
+model HqBillLine {
+  id          String  @id @default(cuid())
+  bill        HqBill  @relation(fields: [billId], references: [id], onDelete: Cascade)
+  billId      String
+  position    Int     @default(0)
+  description String
+  accountId   String
+  netMinor    Int
+  taxPct      Decimal @default(0) @db.Decimal(5, 2)
+  taxMinor    Int     @default(0)
+}
+
+model HqBillPayment {
+  id            String   @id @default(cuid())
+  bill          HqBill   @relation(fields: [billId], references: [id], onDelete: Cascade)
+  billId        String
+  date          DateTime
+  amountMinor   Int
+  perGbp        Decimal  @default(1) @db.Decimal(18, 8)
+  gbpPence      Int
+  bankAccountId String
+  reference     String?
+  userId        String?
+  createdAt     DateTime @default(now())
+
+  @@index([billId])
+}
+
+enum HqCreditStatus {
+  ISSUED
+  VOID
+}
+
+/**
+ * A credit note against an invoice. It reduces what the client owes on that invoice.
+ */
+model HqCreditNote {
+  id            String         @id @default(cuid())
+  number        String         @unique // MPC-2026-K7Q3M
+  invoice       HqInvoice      @relation(fields: [invoiceId], references: [id])
+  invoiceId     String
+  status        HqCreditStatus @default(ISSUED)
+  date          DateTime
+  currency      String
+  perGbp        Decimal        @default(1) @db.Decimal(18, 8)
+  reason        String?
+  subtotalMinor Int
+  discountMinor Int            @default(0)
+  taxMinor      Int            @default(0)
+  totalMinor    Int
+  publicToken   String         @unique
+  createdById   String?
+  createdAt     DateTime       @default(now())
+
+  lines   HqLine[]
+  payment HqPayment?
+}
+
+enum HqFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+/**
+ * A repeating invoice: a new one is made on each date, and emailed if autoSend is on.
+ */
+model HqRecurring {
+  id          String      @id @default(cuid())
+  client      HqClient    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId    String
+  title       String?
+  currency    String      @default("GBP")
+  lines       Json // [{ itemId, description, quantity, unit, discountPct, taxPct }] as typed
+  frequency   HqFrequency @default(MONTHLY)
+  nextDate    DateTime
+  endDate     DateTime?
+  autoSend    Boolean     @default(false)
+  active      Boolean     @default(true)
+  notes       String?
+  terms       String?
+  lastRunAt   DateTime?
+  createdById String?
+  createdAt   DateTime    @default(now())
+
+  invoices HqInvoice[]
+
+  @@index([active, nextDate])
+}
+
+enum HqBankTxnStatus {
+  UNMATCHED
+  MATCHED
+  IGNORED
+}
+
+/**
+ * A line from a bank statement, waiting to be matched to the books.
+ */
+model HqBankTxn {
+  id          String          @id @default(cuid())
+  account     HqAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId   String
+  date        DateTime
+  description String
+  amountMinor Int // signed: money in is positive
+  importKey   String          @unique // so the same line imported twice is skipped
+  status      HqBankTxnStatus @default(UNMATCHED)
+  journal     HqJournal?      @relation(fields: [journalId], references: [id], onDelete: SetNull)
+  journalId   String?         @unique
+  createdAt   DateTime        @default(now())
+
+  @@index([accountId, status, date])
 }
