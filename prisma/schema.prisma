@@ -122,6 +122,7 @@ model Organization {
   bills       Bill[]
   subscriptionInvoices SubscriptionInvoice[]
   pricingSnapshots PricingSnapshot[]
+  cardPayments     CardPayment[]
 }
 
 model OrgSettings {
@@ -733,4 +734,27 @@ model PricingSnapshot {
   createdAt      DateTime     @default(now())
 
   @@index([organizationId, createdAt])
+}
+
+/**
+ * A payment on an integrated card machine (Stripe Terminal, SumUp, Dojo), recorded by the server when the till
+ * starts it and marked approved only when the provider says so. A sale can only claim a card machine payment
+ * that is here, approved, for the same sale and amount, and not already used.
+ */
+model CardPayment {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  registerId     String
+  saleId         String
+  provider       String // STRIPE_TERMINAL | SUMUP | DOJO
+  ref            String // the provider's id for this payment attempt
+  amountPence    Int
+  approvedAt     DateTime?
+  reference      String? // provider's transaction id once approved
+  usedAt         DateTime? // set when a sale using this payment is saved
+  createdAt      DateTime     @default(now())
+
+  @@unique([provider, ref])
+  @@index([organizationId, saleId])
 }

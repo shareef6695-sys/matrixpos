@@ -67,6 +67,8 @@ export async function dailyCleanup() {
   const day = new Date(Date.now() - 86_400_000);
   const attempts = await db.loginAttempt.deleteMany({ where: { createdAt: { lt: day } } });
   const tokens = await db.authToken.deleteMany({ where: { OR: [{ expiresAt: { lt: day } }, { usedAt: { lt: day } }] } });
+  // Card machine attempts that never became part of a saved sale are kept 90 days for reconciliation.
+  await db.cardPayment.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 90 * 86_400_000) }, usedAt: null } });
   const revoked = await db.revokedToken.deleteMany({ where: { expiresAt: { lt: new Date() } } });
   // Tills only sync sales made in the last 14 days, so older price lists are no longer needed.
   const snapshots = await db.pricingSnapshot.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 30 * 86_400_000) } } });

@@ -52,6 +52,7 @@ export async function authorizeOverride(orgId: string, pin: string, min: Role = 
   return u && atLeast(u.role, min) ? u : null;
 }
 
+const INTEGRATED: string[] = ["STRIPE_TERMINAL", "SUMUP", "DOJO"];
 const ROLE_ORDER: Role[] = ["CASHIER", "SUPERVISOR", "MANAGER", "OWNER"];
 
 export async function nextCounter(tx: Prisma.TransactionClient, key: string) {
@@ -185,6 +186,24 @@ export async function recordSale(orgId: string, storeId: string, registerId: str
     throw e;
   }
 
+  // Card machine payments must be ones the provider approved, for this sale and amount, started from this till.
+  const payments = s.payments.map((p) => ({ method: p.method, amountPence: p.amountPence, reference: p.reference ?? null, cardPaymentId: null as string | null }));
+  const card = payments.filter((p) => INTEGRATED.includes(p.method));
+  if (card.length) {
+    if (s.kind === "REFUND") throw new UserError("Refunds can't be paid back through the card machine from the till");
+    const rows = await db.cardPayment.findMany({ where: { organizationId: orgId, registerId, saleId: s.id, approvedAt: { not: null }, usedAt: null } });
+    for (const p of card) {
+      const row = rows.find((r) => r.provider === p.method && r.amountPence === p.amountPence && !payments.some((q) => q.cardPaymentId === r.id));
+      if (!row) {
+        const seen = await db.auditLog.findFirst({ where: { organizationId: orgId, action: "sale.rejected", detail: { path: ["saleId"], equals: s.id } }, select: { id: true } });
+        if (!seen) await audit(orgId, s.userId, "sale.rejected", { saleId: s.id, receiptNo: s.receiptNo, reason: "card payment not approved by the provider" });
+        throw new UserError("A card machine payment on this sale wasn't approved by the card provider");
+      }
+      p.cardPaymentId = row.id;
+      p.reference = row.reference ?? row.ref;
+    }
+  }
+
   const productIds = [...new Set(checked.lines.map((l) => l.productId).filter(Boolean) as string[])];
   const products = await db.product.findMany({ where: { id: { in: productIds }, organizationId: orgId }, select: { id: true, trackStock: true } });
   const known = new Map(products.map((p) => [p.id, p]));
@@ -199,9 +218,15 @@ export async function recordSale(orgId: string, storeId: string, registerId: str
         changePence: s.changePence, ageVerified: s.ageVerified, createdAt: at,
         lines: { create: checked.lines.map((l) => ({ ...l, productId: l.productId && known.has(l.productId) ? l.productId : null })) },
         vatLines: { create: checked.vat },
-        payments: { create: s.payments.map((p) => ({ method: p.method, amountPence: p.amountPence, reference: p.reference ?? null })) },
+        payments: { create: payments.map((p) => ({ method: p.method, amountPence: p.amountPence, reference: p.reference })) },
       },
     });
+    // Each approved card payment pays for one sale only.
+    const ids = card.map((p) => p.cardPaymentId!);
+    if (ids.length) {
+      const { count } = await tx.cardPayment.updateMany({ where: { id: { in: ids }, usedAt: null }, data: { usedAt: new Date() } });
+      if (count !== ids.length) throw new UserError("A card machine payment on this sale was already used");
+    }
 
     if (settings?.enableStockControl !== false) {
       for (const l of checked.lines) {
