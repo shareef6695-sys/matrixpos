@@ -18,12 +18,13 @@ export async function POST(req: Request) {
   const open = await db.shift.findFirst({ where: { registerId: ctx.device.registerId, closedAt: null } });
 
   if (body.action === "open") {
-    if (open) return json({ shift: open });
+    const pick = (x: { id: string; openedAt: Date; openingFloatPence: number }) => ({ id: x.id, openedAt: x.openedAt, openingFloatPence: x.openingFloatPence });
+    if (open) return json({ shift: pick(open) });
     const shift = await db.shift.create({
       data: { storeId: ctx.device.storeId, registerId: ctx.device.registerId, userId: ctx.user.id, openingFloatPence: Math.max(0, Math.trunc(Number(body.floatPence) || 0)) },
     });
     await audit(ctx.device.orgId, ctx.user.id, "shift.open", { float: shift.openingFloatPence });
-    return json({ shift });
+    return json({ shift: pick(shift) });
   }
 
   if (!open) return fail("No shift is open on this till");

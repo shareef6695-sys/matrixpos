@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/admin";
 import { SimpleForm } from "@/components/SimpleForm";
 import { changePassword, disableTotp } from "@/lib/server/actions/account";
 import { otpauthUrl } from "@/lib/server/totp";
+import { openSecret } from "@/lib/server/secret-box";
 import { fmtDate } from "@/lib/dates";
 import { TotpSetup } from "./TotpSetup";
 import { ResendVerification } from "./ResendVerification";
@@ -14,7 +15,7 @@ export const metadata = { title: "My account" };
 export default async function Account() {
   const s = await requireAdmin("MANAGER", { allowLocked: true });
   const user = await db.user.findUniqueOrThrow({ where: { id: s.userId } });
-  const pendingSecret = !user.totpEnabledAt && user.totpSecret ? user.totpSecret : null;
+  const pendingSecret = !user.totpEnabledAt && user.totpSecret ? openSecret(user.totpSecret) : null;
   const qr = pendingSecret && user.email ? await QRCode.toDataURL(otpauthUrl(pendingSecret, user.email), { margin: 1, width: 360 }) : null;
   return (
     <div className="max-w-3xl space-y-6">

@@ -68,7 +68,7 @@ export async function createBankInvoice(orgId: string, opts: { paid?: boolean } 
       billToName: b.billToName, billToEmail: b.billToEmail, billToAddress: b.billToAddress, billToVatNumber: b.billToVatNumber,
     },
   });
-  if (opts.paid) await applyPayment(inv.organizationId, end);
+  if (opts.paid) await applyPayment(orgId, end);
   await emailInvoice(inv.id);
   return inv;
 }
@@ -78,7 +78,7 @@ export async function markInvoicePaid(id: string) {
   const inv = await db.subscriptionInvoice.findUnique({ where: { id } });
   if (!inv || inv.status !== "OPEN") return null;
   await db.subscriptionInvoice.update({ where: { id }, data: { status: "PAID", paidAt: new Date() } });
-  if (inv.periodEnd) await applyPayment(inv.organizationId, inv.periodEnd);
+  if (inv.periodEnd && inv.organizationId) await applyPayment(inv.organizationId, inv.periodEnd);
   await emailInvoice(id);
   return inv;
 }

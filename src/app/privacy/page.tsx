@@ -19,7 +19,7 @@ export default function Privacy() {
       <ul>
         <li>Name, email address, business name, shop address and VAT or company number you give us.</li>
         <li>Your password and till PIN, stored only as one-way hashes that nobody can read.</li>
-        <li>Sign-in records: time, success or failure and network address, used to protect accounts. Kept for 24 hours.</li>
+        <li>Sign-in records: time, success or failure, and a one-way coded form of your email and network address (never the address itself), used to protect accounts. Kept for 24 hours.</li>
         <li>Your plan, trial dates and invoices.</li>
         <li>Records of important actions in your account, such as refunds and setting changes, so you can see who did what.</li>
       </ul>
@@ -37,7 +37,8 @@ export default function Privacy() {
       <ul>
         <li>LightNode, which hosts the database and its nightly backups on a server in the United Kingdom.</li>
         <li>Vercel, which runs the website from its London region. Vercel is a US company. Any transfer outside the UK is covered by the UK International Data Transfer Addendum or the UK–US data bridge.</li>
-        <li>Our email delivery provider, which sends account emails.</li>
+        <li>Our email delivery provider, which sends account emails. It receives your name, email address and the email itself.</li>
+        <li>Stripe, if you pay your subscription by card. It receives your business name, email address and an internal account reference; you give your card and billing address to Stripe directly.</li>
       </ul>
       <p>Card payments are handled by the card provider each shop chooses, such as Stripe, SumUp or Dojo. Card numbers never reach {LEGAL.product}.</p>
       <p>We never sell personal data.</p>
@@ -45,7 +46,7 @@ export default function Privacy() {
       <h2>How long we keep it</h2>
       <ul>
         <li>While your account is open, and for 30 days after you close it. Then your business data is permanently deleted. Backups roll over within 14 days after that.</li>
-        <li>Our own invoices and billing records are kept for 6 years, as UK tax law requires.</li>
+        <li>Our own invoices and billing records are kept for 6 years after the end of the financial year, as UK tax law requires, even after your account is deleted. The email address on them is removed when the account is deleted.</li>
       </ul>
 
       <h2>Cookies</h2>

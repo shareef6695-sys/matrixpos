@@ -13,6 +13,6 @@ export async function POST(req: Request) {
     await recordAttempt([key], false);
     return fail("That PIN can't approve this", 403);
   }
-  await audit(ctx.device.orgId, approver.id, `override.${String(action).slice(0, 30)}`, { cashier: ctx.user.name, detail: detail ?? null });
-  return json({ ok: true, approver: { id: approver.id, name: approver.name } });
+  await audit(ctx.device.orgId, approver.id, `override.${String(action).slice(0, 30)}`, { cashierId: ctx.user.id, detail: typeof detail === "string" ? detail.slice(0, 200) : null });
+  return json({ ok: true, approver: { name: approver.name } });
 }

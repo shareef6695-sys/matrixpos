@@ -1,5 +1,6 @@
 // Runs during production deploys, after migrations: encrypts any card provider keys still stored
-// as plain text (saved before SECRETS_ENCRYPTION_KEY was set, or before a key change).
+// as plain text (saved before SECRETS_ENCRYPTION_KEY was set, or before a key change), and the
+// two-step sign-in (authenticator app) secrets of back office users.
 // Same format as src/lib/server/secret-box.ts. Safe to run any number of times.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
@@ -54,6 +55,21 @@ if (env && env !== "production") {
       if (Object.keys(data).length) { await db.orgSettings.update({ where: { id: row.id }, data }); changed++; }
     }
     console.log(`Card provider keys: ${changed} shop(s) encrypted or re-keyed, ${rows.length} checked.`);
+
+    const users = await db.user.findMany({ where: { totpSecret: { not: null } }, select: { id: true, totpSecret: true } });
+    let totp = 0;
+    for (const u of users) {
+      const v = u.totpSecret;
+      let next = null;
+      if (!v.startsWith(PREFIX)) next = seal(v);
+      else {
+        try { openWith(key, v); } catch {
+          if (oldKey) { try { next = seal(openWith(oldKey, v)); } catch { console.error(`Can't decrypt the two-step sign-in secret for user ${u.id}; reset it from HQ.`); } }
+        }
+      }
+      if (next) { await db.user.update({ where: { id: u.id }, data: { totpSecret: next } }); totp++; }
+    }
+    console.log(`Two-step sign-in secrets: ${totp} encrypted or re-keyed, ${users.length} checked.`);
   } finally {
     await db.$disconnect();
   }

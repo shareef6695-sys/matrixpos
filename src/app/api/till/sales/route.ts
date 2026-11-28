@@ -36,12 +36,16 @@ export async function GET(req: Request) {
   if (!device) return fail("This device is not set up as a till", 401);
   const q = new URL(req.url).searchParams.get("receipt")?.trim().toUpperCase();
   if (!q) return fail("Enter a receipt number");
+  // Only what the refund screen shows: no cashier, customer, payment references or internal ids beyond the sale's own.
   const sale = await db.sale.findFirst({
     where: { organizationId: device.orgId, receiptNo: q, kind: "SALE" },
-    include: { lines: true, payments: true, vatLines: true, user: { select: { name: true } } },
+    select: {
+      id: true, receiptNo: true, createdAt: true, totalPence: true,
+      lines: { select: { productId: true, name: true, quantity: true, unit: true, unitPricePence: true, grossPence: true, netPence: true, vatCode: true } },
+    },
   });
   if (!sale) return fail("Receipt not found", 404);
-  const refunds = await db.sale.findMany({ where: { originalSaleId: sale.id }, include: { lines: true } });
+  const refunds = await db.sale.findMany({ where: { originalSaleId: sale.id, organizationId: device.orgId }, select: { lines: { select: { productId: true, name: true, quantity: true } } } });
   const refunded: Record<string, number> = {};
   for (const r of refunds) for (const l of r.lines) refunded[`${l.productId ?? l.name}`] = (refunded[`${l.productId ?? l.name}`] ?? 0) + Math.abs(l.quantity);
   return json({ sale, refunded });
