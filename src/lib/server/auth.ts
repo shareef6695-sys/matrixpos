@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { accessFor } from "@/lib/plans";
 import { isRevoked } from "./revocation";
+import type { HqRole } from "@prisma/client";
 import {
   ADMIN_COOKIE, DEVICE_COOKIE, TILL_COOKIE, verify, atLeast,
   type AdminSession, type AdminToken, type DeviceSession, type TillSession, type Role,
@@ -36,16 +37,26 @@ export const cookieOpts = (maxAge: number) => ({
 });
 
 /**
- * The signed-in back office user, or null. Checked against the database on every request, so a person who is
- * switched off, or whose password was changed or reset, is signed out at once, and role changes apply straight away.
+ * The signed-in person behind the back office cookie, checked against the database on every request, so a person
+ * who is switched off, or whose password was changed or reset, is signed out at once, and role changes apply
+ * straight away. `hqRole` is set for HQ staff: they may only use Matrix HQ, never a shop's back office.
  */
-export const getAdmin = cache(async (): Promise<AdminSession | null> => {
+export const signedInUser = cache(async (): Promise<{ session: AdminSession; hqRole: HqRole | null; emailVerified: boolean } | null> => {
   const s = await verify<AdminToken>((await cookies()).get(ADMIN_COOKIE)?.value, "admin");
   if (!s || (await isRevoked(s.jti))) return null;
-  const u = await db.user.findUnique({ where: { id: s.userId }, select: { active: true, role: true, name: true, organizationId: true, sessionVersion: true } });
+  const u = await db.user.findUnique({
+    where: { id: s.userId },
+    select: { active: true, role: true, name: true, organizationId: true, sessionVersion: true, emailVerifiedAt: true, hqMember: { select: { role: true } } },
+  });
   if (!u || !u.active || u.organizationId !== s.orgId || (s.v ?? 0) !== u.sessionVersion) return null;
   if (u.role === "CASHIER" || u.role === "SUPERVISOR") return null;
-  return { ...s, role: u.role, name: u.name };
+  return { session: { ...s, role: u.role, name: u.name }, hqRole: u.hqMember?.role ?? null, emailVerified: !!u.emailVerifiedAt };
+});
+
+/** The signed-in shop back office user, or null. HQ staff are never a shop user, so they get null here. */
+export const getAdmin = cache(async (): Promise<AdminSession | null> => {
+  const u = await signedInUser();
+  return u && !u.hqRole ? u.session : null;
 });
 
 /**
@@ -54,7 +65,7 @@ export const getAdmin = cache(async (): Promise<AdminSession | null> => {
  */
 export async function requireAdmin(min: Role = "MANAGER", opts: { allowLocked?: boolean } = {}): Promise<AdminSession> {
   const s = await getAdmin();
-  if (!s) redirect("/login");
+  if (!s) redirect((await signedInUser())?.hqRole ? "/platform/home" : "/login");
   if (!atLeast(s.role, min)) redirect("/admin?denied=1");
   if (!opts.allowLocked && !(await orgAllowed(s.orgId))) redirect("/admin/billing");
   return s;

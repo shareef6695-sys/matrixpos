@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   url       = env("DATABASE_URL")
   // Migrations need a direct (session) connection. With Supabase, DATABASE_URL goes
   // through the transaction pooler (port 6543) and DIRECT_URL through session mode (5432).
@@ -79,26 +79,26 @@ enum PurchaseOrderStatus {
 }
 
 model Organization {
-  id           String   @id @default(cuid())
-  name         String
-  slug         String   @unique
-  vatNumber    String? // e.g. GB123456789
-  companyNo    String?
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  vatNumber     String? // e.g. GB123456789
+  companyNo     String?
   receiptFooter String?
-  brandColor   String   @default("#0f766e")
-  currency     String   @default("GBP")
-  createdAt    DateTime @default(now())
+  brandColor    String   @default("#0f766e")
+  currency      String   @default("GBP")
+  createdAt     DateTime @default(now())
 
   // Subscription, managed by the platform owner at /platform.
-  plan          Plan          @default(BUSINESS)
-  billingStatus BillingStatus @default(TRIAL)
-  billingCycle  BillingCycle  @default(MONTHLY)
-  trialEndsAt   DateTime?
-  paidUntil     DateTime?
-  billingNote   String?
+  plan                 Plan          @default(BUSINESS)
+  billingStatus        BillingStatus @default(TRIAL)
+  billingCycle         BillingCycle  @default(MONTHLY)
+  trialEndsAt          DateTime?
+  paidUntil            DateTime?
+  billingNote          String?
   // Card payments through Stripe Billing (optional; invoicing still works without it).
-  stripeCustomerId     String? @unique
-  stripeSubscriptionId String? @unique
+  stripeCustomerId     String?       @unique
+  stripeSubscriptionId String?       @unique
 
   // Legal: when the owner accepted the terms, privacy policy and data processing agreement.
   termsAcceptedAt    DateTime?
@@ -109,20 +109,20 @@ model Organization {
   // Feature activation: each business switches on what it needs.
   settings OrgSettings?
 
-  stores      Store[]
-  users       User[]
-  categories  Category[]
-  products    Product[]
-  promotions  Promotion[]
-  suppliers   Supplier[]
-  customers   Customer[]
-  auditLogs   AuditLog[]
-  ledgerAccounts LedgerAccount[]
-  journals    JournalEntry[]
-  bills       Bill[]
+  stores               Store[]
+  users                User[]
+  categories           Category[]
+  products             Product[]
+  promotions           Promotion[]
+  suppliers            Supplier[]
+  customers            Customer[]
+  auditLogs            AuditLog[]
+  ledgerAccounts       LedgerAccount[]
+  journals             JournalEntry[]
+  bills                Bill[]
   subscriptionInvoices SubscriptionInvoice[]
-  pricingSnapshots PricingSnapshot[]
-  cardPayments     CardPayment[]
+  pricingSnapshots     PricingSnapshot[]
+  cardPayments         CardPayment[]
 }
 
 model OrgSettings {
@@ -144,19 +144,19 @@ model OrgSettings {
   dojoApiKey        String?
 
   // Modules
-  enablePromotions    Boolean @default(true)
-  enableAgeCheck      Boolean @default(true)
-  enableWeighedItems  Boolean @default(true)
-  enableStockControl  Boolean @default(true)
-  enableLoyalty       Boolean @default(false)
-  enableOfflineMode   Boolean @default(true)
-  enableAccounting    Boolean @default(true)
+  enablePromotions   Boolean @default(true)
+  enableAgeCheck     Boolean @default(true)
+  enableWeighedItems Boolean @default(true)
+  enableStockControl Boolean @default(true)
+  enableLoyalty      Boolean @default(false)
+  enableOfflineMode  Boolean @default(true)
+  enableAccounting   Boolean @default(true)
 
   // UK variable-measure barcodes (EAN-13 starting with 2): price-embedded or weight-embedded
   embeddedBarcodeMode String @default("PRICE") // PRICE | WEIGHT | OFF
 
-  ageCheckThreshold Int @default(25) // Challenge 25
-  loyaltyPointsPerPound Int @default(1)
+  ageCheckThreshold       Int     @default(25) // Challenge 25
+  loyaltyPointsPerPound   Int     @default(1)
   requireManagerForRefund Boolean @default(true)
   requireManagerForVoid   Boolean @default(true)
 }
@@ -174,27 +174,27 @@ model Store {
   phone          String?
   createdAt      DateTime     @default(now())
 
-  registers    Register[]
-  stockLevels  StockLevel[]
-  sales        Sale[]
-  shifts       Shift[]
-  movements    StockMovement[]
+  registers      Register[]
+  stockLevels    StockLevel[]
+  sales          Sale[]
+  shifts         Shift[]
+  movements      StockMovement[]
   purchaseOrders PurchaseOrder[]
-  users        UserStore[]
+  users          UserStore[]
 
   @@unique([organizationId, code])
 }
 
 model Register {
-  id        String   @id @default(cuid())
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  storeId   String
-  name      String // "Till 1"
-  number    Int
+  id             String   @id @default(cuid())
+  store          Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId        String
+  name           String // "Till 1"
+  number         Int
   stripeReaderId String?
   sumupReaderId  String?
   dojoTerminalId String?
-  createdAt DateTime @default(now())
+  createdAt      DateTime @default(now())
 
   sales  Sale[]
   shifts Shift[]
@@ -203,21 +203,22 @@ model Register {
 }
 
 model User {
-  id             String       @id @default(cuid())
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  organizationId String
-  name           String
-  email          String?      @unique
-  passwordHash   String? // back office login (owners and managers)
-  pinHash        String // till login
-  role           Role         @default(CASHIER)
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
+  id              String       @id @default(cuid())
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId  String
+  name            String
+  email           String?      @unique
+  passwordHash    String? // back office login (owners and managers)
+  pinHash         String // till login
+  role            Role         @default(CASHIER)
+  active          Boolean      @default(true)
+  createdAt       DateTime     @default(now())
   emailVerifiedAt DateTime?
-  sessionVersion Int          @default(0) // bumped to sign the person out everywhere
-  totpSecret     String? // two-step sign-in (authenticator app), base32
-  totpEnabledAt  DateTime?
-  authTokens     AuthToken[]
+  sessionVersion  Int          @default(0) // bumped to sign the person out everywhere
+  totpSecret      String? // two-step sign-in (authenticator app), base32
+  totpEnabledAt   DateTime?
+  authTokens      AuthToken[]
+  hqMember        HqMember?
 
   stores    UserStore[]
   sales     Sale[]
@@ -255,28 +256,28 @@ model Product {
   supplier       Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   supplierId     String?
 
-  name        String
-  sku         String?
-  plu         String? // short code for loose items and embedded barcodes
-  pricePence  Int // VAT inclusive; per kg when unit = PER_KG
-  costPence   Int?        // VAT exclusive cost price
-  vatCode     VatCode     @default(STANDARD)
-  unit        PricingUnit @default(EACH)
-  minAge      Int? // 16 or 18 for age-restricted goods
-  trackStock  Boolean     @default(true)
+  name         String
+  sku          String?
+  plu          String? // short code for loose items and embedded barcodes
+  pricePence   Int // VAT inclusive; per kg when unit = PER_KG
+  costPence    Int? // VAT exclusive cost price
+  vatCode      VatCode     @default(STANDARD)
+  unit         PricingUnit @default(EACH)
+  minAge       Int? // 16 or 18 for age-restricted goods
+  trackStock   Boolean     @default(true)
   reorderLevel Int?
   reorderQty   Int?
-  quickKey    Boolean     @default(false) // show as a button on the till
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  quickKey     Boolean     @default(false) // show as a button on the till
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-  barcodes    Barcode[]
-  stockLevels StockLevel[]
-  saleLines   SaleLine[]
-  movements   StockMovement[]
+  barcodes       Barcode[]
+  stockLevels    StockLevel[]
+  saleLines      SaleLine[]
+  movements      StockMovement[]
   promotionItems PromotionItem[]
-  poLines     PurchaseOrderLine[]
+  poLines        PurchaseOrderLine[]
 
   @@unique([organizationId, sku])
   @@unique([organizationId, plu])
@@ -367,31 +368,31 @@ model Customer {
 }
 
 model Shift {
-  id              String    @id @default(cuid())
-  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  storeId         String
-  register        Register  @relation(fields: [registerId], references: [id], onDelete: Cascade)
-  registerId      String
-  user            User      @relation(fields: [userId], references: [id])
-  userId          String
-  openedAt        DateTime  @default(now())
-  closedAt        DateTime?
-  openingFloatPence Int     @default(0)
+  id                String         @id @default(cuid())
+  store             Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId           String
+  register          Register       @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  registerId        String
+  user              User           @relation(fields: [userId], references: [id])
+  userId            String
+  openedAt          DateTime       @default(now())
+  closedAt          DateTime?
+  openingFloatPence Int            @default(0)
   countedCashPence  Int?
   expectedCashPence Int?
-  zNumber         Int? // sequential Z report number per register
-  sales           Sale[]
-  cashMovements   CashMovement[]
+  zNumber           Int? // sequential Z report number per register
+  sales             Sale[]
+  cashMovements     CashMovement[]
 }
 
 model CashMovement {
-  id        String   @id @default(cuid())
-  shift     Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-  shiftId   String
+  id          String   @id @default(cuid())
+  shift       Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  shiftId     String
   amountPence Int // positive = paid in, negative = paid out / safe drop
-  reason    String
-  userId    String
-  createdAt DateTime @default(now())
+  reason      String
+  userId      String
+  createdAt   DateTime @default(now())
 }
 
 model Sale {
@@ -429,21 +430,21 @@ model Sale {
 }
 
 model SaleLine {
-  id            String  @id @default(cuid())
-  sale          Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  saleId        String
-  product       Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  productId     String?
-  name          String
-  quantity      Int // units, or grams for weighed lines
-  unit          PricingUnit
+  id             String      @id @default(cuid())
+  sale           Sale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleId         String
+  product        Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId      String?
+  name           String
+  quantity       Int // units, or grams for weighed lines
+  unit           PricingUnit
   unitPricePence Int
-  grossPence    Int // before discount
-  discountPence Int
-  netPence      Int // after discount, VAT inclusive
-  vatCode       VatCode
-  vatRate       Int // basis points, 2000 = 20%
-  promotionName String?
+  grossPence     Int // before discount
+  discountPence  Int
+  netPence       Int // after discount, VAT inclusive
+  vatCode        VatCode
+  vatRate        Int // basis points, 2000 = 20%
+  promotionName  String?
 }
 
 model SaleVat {
@@ -468,8 +469,8 @@ model Payment {
 }
 
 model Supplier {
-  id             String       @id @default(cuid())
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id             String          @id @default(cuid())
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
   name           String
   contactName    String?
@@ -484,18 +485,18 @@ model Supplier {
 }
 
 model PurchaseOrder {
-  id         String              @id @default(cuid())
+  id             String              @id @default(cuid())
   organizationId String
-  supplier   Supplier            @relation(fields: [supplierId], references: [id])
-  supplierId String
-  store      Store               @relation(fields: [storeId], references: [id])
-  storeId    String
-  reference  String
-  status     PurchaseOrderStatus @default(DRAFT)
-  notes      String?
-  createdAt  DateTime            @default(now())
-  receivedAt DateTime?
-  lines      PurchaseOrderLine[]
+  supplier       Supplier            @relation(fields: [supplierId], references: [id])
+  supplierId     String
+  store          Store               @relation(fields: [storeId], references: [id])
+  storeId        String
+  reference      String
+  status         PurchaseOrderStatus @default(DRAFT)
+  notes          String?
+  createdAt      DateTime            @default(now())
+  receivedAt     DateTime?
+  lines          PurchaseOrderLine[]
 }
 
 model PurchaseOrderLine {
@@ -599,25 +600,25 @@ model JournalLine {
 }
 
 model Bill {
-  id             String       @id @default(cuid())
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  organizationId String
-  supplier       Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  supplierId     String?
-  payee          String // supplier or shop name as on the invoice/receipt
-  date           DateTime
-  dueDate        DateTime?
-  reference      String? // invoice number
-  accountId      String // what it was for (stock purchases, rent, electricity...)
-  vatCode        VatCode
-  netPence       Int
-  vatPence       Int
-  grossPence     Int
-  paidAt         DateTime?
-  paidFromId     String? // bank or cash account
+  id              String       @id @default(cuid())
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId  String
+  supplier        Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierId      String?
+  payee           String // supplier or shop name as on the invoice/receipt
+  date            DateTime
+  dueDate         DateTime?
+  reference       String? // invoice number
+  accountId       String // what it was for (stock purchases, rent, electricity...)
+  vatCode         VatCode
+  netPence        Int
+  vatPence        Int
+  grossPence      Int
+  paidAt          DateTime?
+  paidFromId      String? // bank or cash account
   purchaseOrderId String?
-  notes          String?
-  createdAt      DateTime     @default(now())
+  notes           String?
+  createdAt       DateTime     @default(now())
 
   @@index([organizationId, date])
 }
@@ -646,7 +647,9 @@ enum AuthTokenKind {
   RESET_PASSWORD
 }
 
-/** One-time links sent by email. Only a hash of the token is stored. */
+/**
+ * One-time links sent by email. Only a hash of the token is stored.
+ */
 model AuthToken {
   id        String        @id @default(cuid())
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -660,7 +663,9 @@ model AuthToken {
   @@index([userId, kind])
 }
 
-/** Back office sign-in attempts, for rate limiting. Old rows are purged daily. */
+/**
+ * Back office sign-in attempts, for rate limiting. Old rows are purged daily.
+ */
 model LoginAttempt {
   id        String   @id @default(cuid())
   key       String // "email:<address>" or "ip:<address>"
@@ -757,4 +762,297 @@ model CardPayment {
 
   @@unique([provider, ref])
   @@index([organizationId, saleId])
+}
+
+// ---------------- Matrix HQ: running Matrix Infotech Ltd. ----------------
+// These tables belong to the platform owner's own business (custom software, resold apps, POS plans),
+// not to any shop. Only HQ (platform admins and HQ staff) can reach them. Money is in integer minor
+// units of the document's currency (pence, cents, fils...), and every document keeps the exchange rate
+// to GBP it was issued at, so the GBP figures never change afterwards.
+
+enum HqRole {
+  MANAGER // every business module, but not HQ staff or shop customers
+  SALES // clients, leads, quotes
+  ACCOUNTS // clients, invoices, payments, catalogue, exchange rates
+  PROJECTS // reads clients and the catalogue (projects arrive in phase 3)
+  VIEWER // reads everything, changes nothing
+}
+
+/**
+ * A member of HQ staff. They sign in like any back office user, but can only use HQ, never a shop.
+ */
+model HqMember {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String   @unique
+  role        HqRole   @default(VIEWER)
+  invitedById String?
+  createdAt   DateTime @default(now())
+}
+
+enum HqItemKind {
+  SERVICE // custom build, consulting, design, hourly work
+  SUBSCRIPTION // recurring plans, hosting, support
+  PRODUCT // licences, hardware, one-off products
+  THIRD_PARTY // apps and services resold from another vendor
+}
+
+/**
+ * Everything Matrix Infotech sells.
+ */
+model HqItem {
+  id          String     @id @default(cuid())
+  name        String
+  sku         String?    @unique
+  kind        HqItemKind @default(SERVICE)
+  description String?
+  unit        String     @default("each") // each, hour, day, month, year
+  currency    String     @default("GBP")
+  priceMinor  Int        @default(0)
+  costMinor   Int? // what it costs you (for third-party items)
+  vendor      String? // who supplies a third-party item
+  url         String? // the page on your website
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  lines HqLine[]
+}
+
+model HqClient {
+  id           String   @id @default(cuid())
+  name         String
+  isCompany    Boolean  @default(true)
+  email        String?
+  phone        String?
+  website      String?
+  addressLine1 String?
+  addressLine2 String?
+  town         String?
+  postcode     String?
+  country      String   @default("United Kingdom")
+  vatNumber    String?
+  companyNo    String?
+  currency     String   @default("GBP")
+  paymentDays  Int      @default(14)
+  notes        String?
+  ownerId      String? // the HQ user looking after this client
+  archived     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  contacts HqContact[]
+  leads    HqLead[]
+  quotes   HqQuote[]
+  invoices HqInvoice[]
+  notesLog HqNote[]
+
+  @@index([name])
+}
+
+model HqContact {
+  id        String   @id @default(cuid())
+  client    HqClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  String
+  name      String
+  email     String?
+  phone     String?
+  jobTitle  String?
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+}
+
+enum HqLeadStage {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  WON
+  LOST
+}
+
+model HqLead {
+  id            String      @id @default(cuid())
+  title         String // what they want, e.g. "Booking app for a dental clinic"
+  company       String?
+  contactName   String?
+  email         String?
+  phone         String?
+  source        String? // website, WhatsApp, referral...
+  stage         HqLeadStage @default(NEW)
+  currency      String      @default("GBP")
+  valueMinor    Int         @default(0)
+  expectedClose DateTime?
+  ownerId       String?
+  client        HqClient?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId      String?
+  lostReason    String?
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  notesLog HqNote[]
+
+  @@index([stage])
+}
+
+/**
+ * A note, call or meeting on a client or lead's timeline.
+ */
+model HqNote {
+  id        String    @id @default(cuid())
+  client    HqClient? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  String?
+  lead      HqLead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId    String?
+  kind      String    @default("NOTE") // NOTE, CALL, EMAIL, MEETING
+  body      String
+  userId    String?
+  userName  String?
+  createdAt DateTime  @default(now())
+
+  @@index([clientId, createdAt])
+  @@index([leadId, createdAt])
+}
+
+/**
+ * How many units of a currency one pound buys, as of a date. Typed in by HQ (no outside feed).
+ */
+model HqFxRate {
+  id        String   @id @default(cuid())
+  currency  String
+  perGbp    Decimal  @db.Decimal(18, 8)
+  date      DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([currency, date])
+}
+
+enum HqQuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+  INVOICED
+}
+
+model HqQuote {
+  id            String        @id @default(cuid())
+  number        String        @unique // MPQ-2026-K7Q3M
+  client        HqClient      @relation(fields: [clientId], references: [id])
+  clientId      String
+  title         String?
+  status        HqQuoteStatus @default(DRAFT)
+  issueDate     DateTime
+  expiryDate    DateTime?
+  currency      String        @default("GBP")
+  perGbp        Decimal       @default(1) @db.Decimal(18, 8)
+  subtotalMinor Int           @default(0)
+  discountMinor Int           @default(0)
+  taxMinor      Int           @default(0)
+  totalMinor    Int           @default(0)
+  notes         String?
+  terms         String?
+  publicToken   String        @unique // for the client's view-and-accept link
+  sentAt        DateTime?
+  respondedAt   DateTime?
+  createdById   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  lines   HqLine[]
+  invoice HqInvoice?
+
+  @@index([status])
+}
+
+enum HqInvoiceStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  PAID
+  VOID
+}
+
+model HqInvoice {
+  id              String          @id @default(cuid())
+  number          String          @unique // MPI-2026-K7Q3M, shared with the POS subscription invoices
+  client          HqClient        @relation(fields: [clientId], references: [id])
+  clientId        String
+  quote           HqQuote?        @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  quoteId         String?         @unique
+  title           String?
+  status          HqInvoiceStatus @default(DRAFT)
+  issueDate       DateTime
+  dueDate         DateTime
+  currency        String          @default("GBP")
+  perGbp          Decimal         @default(1) @db.Decimal(18, 8)
+  subtotalMinor   Int             @default(0)
+  discountMinor   Int             @default(0)
+  taxMinor        Int             @default(0)
+  totalMinor      Int             @default(0)
+  paidMinor       Int             @default(0)
+  notes           String?
+  terms           String?
+  // Who it was billed to, as it was on the day it was sent.
+  billToName      String?
+  billToAddress   String?
+  billToEmail     String?
+  billToVatNumber String?
+  publicToken     String          @unique
+  sentAt          DateTime?
+  paidAt          DateTime?
+  voidedAt        DateTime?
+  createdById     String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  lines    HqLine[]
+  payments HqPayment[]
+
+  @@index([status, dueDate])
+  @@index([issueDate])
+}
+
+/**
+ * A line on a quote or an invoice.
+ */
+model HqLine {
+  id          String     @id @default(cuid())
+  quote       HqQuote?   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId     String?
+  invoice     HqInvoice? @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   String?
+  item        HqItem?    @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  itemId      String?
+  position    Int        @default(0)
+  description String
+  quantity    Decimal    @db.Decimal(12, 3)
+  unitMinor   Int
+  discountPct Decimal    @default(0) @db.Decimal(5, 2)
+  taxPct      Decimal    @default(0) @db.Decimal(5, 2)
+  amountMinor Int // after discount, before tax
+
+  @@index([quoteId])
+  @@index([invoiceId])
+}
+
+model HqPayment {
+  id          String    @id @default(cuid())
+  invoice     HqInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   String
+  date        DateTime
+  amountMinor Int // in the invoice's currency
+  perGbp      Decimal   @default(1) @db.Decimal(18, 8) // rate on the day it was received
+  gbpPence    Int
+  method      String    @default("BANK") // BANK, CARD, CASH, PAYPAL, STRIPE, CHEQUE, OTHER
+  reference   String?
+  notes       String?
+  userId      String?
+  createdAt   DateTime  @default(now())
+
+  @@index([invoiceId])
+  @@index([date])
 }

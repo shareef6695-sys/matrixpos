@@ -258,7 +258,8 @@ export async function eraseStaff(_: FormState, f: FormData): Promise<FormState> 
   if (demo) return { error: demo };
   const id = str(f, "id");
   if (id === s.userId) return { error: "You can't erase yourself. An owner can close the whole account under Plan & billing." };
-  const u = await db.user.findFirst({ where: { id, organizationId: s.orgId }, select: { role: true } });
+  // HQ staff are managed in Matrix HQ, not on the shop's staff page.
+  const u = await db.user.findFirst({ where: { id, organizationId: s.orgId, hqMember: null }, select: { role: true } });
   if (!u) return { error: "Staff member not found" };
   if ((u.role === "OWNER" || u.role === "MANAGER") && s.role !== "OWNER") return { error: "Only an owner can erase a manager or owner" };
   if (u.role === "OWNER" && (await db.user.count({ where: { organizationId: s.orgId, role: "OWNER", active: true, id: { not: id } } })) === 0)
@@ -271,7 +272,7 @@ export async function eraseStaff(_: FormState, f: FormData): Promise<FormState> 
 }
 
 async function pinInUse(orgId: string, pin: string, exceptId?: string | null) {
-  const users = await db.user.findMany({ where: { organizationId: orgId, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { pinHash: true } });
+  const users = await db.user.findMany({ where: { organizationId: orgId, hqMember: null, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { pinHash: true } });
   for (const u of users) if (await compare(pin, u.pinHash)) return true;
   return false;
 }
@@ -307,7 +308,7 @@ export async function saveStaff(_: FormState, f: FormData): Promise<FormState> {
     ...(password ? { passwordHash: await hash(password) } : {}),
   };
   if (id) {
-    const u = await db.user.findFirst({ where: { id, organizationId: s.orgId } });
+    const u = await db.user.findFirst({ where: { id, organizationId: s.orgId, hqMember: null } });
     if (!u) return { error: "Staff member not found" };
     if (u.role === "OWNER" && s.role !== "OWNER") return { error: "Only an owner can edit an owner" };
     // Otherwise one manager could set another manager's password or email and sign in as them.
