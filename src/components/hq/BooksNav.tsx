@@ -2,7 +2,7 @@ import Link from "next/link";
 
 const TABS = [
   ["/platform/accounts", "Overview"], ["/platform/accounts/reports", "Reports"], ["/platform/accounts/chart", "Chart of accounts"],
-  ["/platform/accounts/journals", "Journals"], ["/platform/accounts/settings", "Lock date"],
+  ["/platform/accounts/journals", "Journals"], ["/platform/accounts/vat", "VAT"], ["/platform/accounts/year-end", "Year end"], ["/platform/accounts/settings", "Lock date"],
 ] as const;
 
 export function BooksNav({ current }: { current: string }) {

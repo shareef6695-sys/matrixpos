@@ -1,11 +1,11 @@
 import "server-only";
+import { chargesVatOn } from "@/lib/server/hq-vat";
 import { db } from "./db";
 import { nextInvoiceNumber, publicToken, rateFor } from "./hq";
 import { billTo, emailHqInvoice } from "./hq-docs";
 import { postInvoice, HqLockedError } from "./hq-books";
 import { parseLines } from "@/lib/hq/lines";
 import { addPeriod } from "@/lib/hq/bill-lines";
-import { seller } from "@/lib/legal";
 import { addDays, londonDate, londonDayStart } from "@/lib/dates";
 
 /**
@@ -22,7 +22,7 @@ export async function runRecurring(now = new Date()) {
     for (let guard = 0; guard < 24 && next <= today; guard++) {
       if (r.endDate && londonDayStart(next) > r.endDate) break;
       const rate = await rateFor(r.currency, londonDayStart(next));
-      const parsed = parseLines(JSON.stringify(r.lines), r.currency, seller().chargeVat);
+      const parsed = parseLines(JSON.stringify(r.lines), r.currency, await chargesVatOn(londonDayStart(next)));
       if ("error" in parsed) { out.problems.push(`${r.client.name}: ${parsed.error}`); break; }
       if (rate === null) { out.problems.push(`${r.client.name}: no exchange rate for ${r.currency}`); break; }
       const issue = londonDayStart(next);

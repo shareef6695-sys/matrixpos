@@ -3,6 +3,7 @@ import Link from "next/link";
 import { db } from "@/lib/server/db";
 import { requireHq } from "@/lib/server/hq";
 import { hqBalances } from "@/lib/server/hq-books";
+import { tradingBalances } from "@/lib/server/hq-vat";
 import { PageHeader } from "@/components/admin";
 import { BooksNav } from "@/components/hq/BooksNav";
 import { PrintButton } from "@/components/PrintButton";
@@ -82,14 +83,19 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
   const title = REPORTS.find(([k]) => k === r)![1];
   let body: React.ReactNode;
   if (r === "pl") {
-    const p = profitAndLoss(await hqBalances({ gte, lt }));
+    const p = profitAndLoss(await tradingBalances({ gte, lt }));
+    // Corporation Tax is shown below the profit before tax, not as an overhead.
+    const ct = p.overheads.find((a) => a.key === "CT_EXPENSE");
+    const overheads = p.overheads.filter((a) => a !== ct);
+    const before = p.netProfit + (ct?.balance ?? 0);
     body = (
       <table className="w-full text-sm"><tbody>
         <Rows title="Income" rows={p.income} total={p.totalIncome} totalLabel="Total income" />
         {p.cos.length > 0 && <Rows title="Cost of sales" rows={p.cos} total={p.totalCos} totalLabel="Total cost of sales" />}
         <Total label="Gross profit" n={p.grossProfit} />
-        <Rows title="Overheads" rows={p.overheads} total={p.totalOverheads} totalLabel="Total overheads" />
-        <Total label="Net profit (before Corporation Tax)" n={p.netProfit} big />
+        <Rows title="Overheads" rows={overheads} total={p.totalOverheads - (ct?.balance ?? 0)} totalLabel="Total overheads" />
+        <Total label="Profit before tax" n={before} big />
+        {ct && <><Rows rows={[ct]} /><Total label="Profit after tax" n={p.netProfit} big /></>}
       </tbody></table>
     );
   } else if (r === "bs") {

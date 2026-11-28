@@ -31,6 +31,8 @@ export const INVOICE_STATUS: Record<string, { label: string; cls: string }> = {
 export const SOURCE_LABEL: Record<string, string> = {
   INVOICE: "Invoice", INVOICE_VOID: "Invoice voided", PAYMENT: "Payment received", CREDIT_NOTE: "Credit note", BILL: "Bill",
   BILL_VOID: "Bill voided", BILL_PAYMENT: "Bill paid", BANK: "Bank line", MANUAL: "Journal",
+  POS_INVOICE: "MatrixPOS invoice", POS_INVOICE_VOID: "MatrixPOS invoice cancelled", POS_PAYMENT: "MatrixPOS payment",
+  VAT_RETURN: "VAT return", CT_ACCRUAL: "Corporation Tax", YEAR_END: "Year end",
 };
 
 export function sourceLink(source: string, sourceId: string | null, ref?: { invoiceId?: string; billId?: string; accountId?: string }) {
@@ -84,3 +86,20 @@ export const RENEWAL: Record<string, { label: string; cls: string }> = {
   due: { label: "Renewal due", cls: "bg-amber-100 text-amber-800" },
   overdue: { label: "Ended, not renewed", cls: "bg-red-100 text-red-800" },
 };
+
+// ---------------- VAT and year end ----------------
+
+/** The nine boxes of a VAT return, as HMRC words them. */
+export const VAT_BOXES = [
+  "VAT due on sales and other outputs",
+  "VAT due on acquisitions from the EU (Northern Ireland only)",
+  "Total VAT due (box 1 plus box 2)",
+  "VAT reclaimed on purchases and other inputs",
+  "Net VAT to pay to HMRC or reclaim (box 3 minus box 4)",
+  "Total value of sales and other outputs, before VAT",
+  "Total value of purchases and other inputs, before VAT",
+  "Total value of goods supplied to the EU (Northern Ireland only)",
+  "Total value of acquisitions of goods from the EU (Northern Ireland only)",
+] as const;
+
+export const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const;

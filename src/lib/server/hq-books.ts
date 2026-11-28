@@ -13,11 +13,20 @@ type Tx = Prisma.TransactionClient | PrismaClient;
 export class HqLockedError extends Error {}
 
 export async function ensureHqChart(tx: Tx = db) {
-  if (await tx.hqAccount.count()) return;
-  await tx.hqAccount.createMany({
-    data: HQ_CHART.map((a) => ({ code: a.code, name: a.name, type: a.type, systemKey: a.key ?? null, isBank: a.isBank ?? false })),
-    skipDuplicates: true,
-  });
+  const existing = await tx.hqAccount.findMany({ select: { code: true, systemKey: true } });
+  if (!existing.length) {
+    await tx.hqAccount.createMany({
+      data: HQ_CHART.map((a) => ({ code: a.code, name: a.name, type: a.type, systemKey: a.key ?? null, isBank: a.isBank ?? false })),
+      skipDuplicates: true,
+    });
+    return;
+  }
+  // Books made before an automatic account was added get it now (or the account with its code is marked as it).
+  const keys = new Set(existing.map((a) => a.systemKey));
+  for (const a of HQ_CHART.filter((x) => x.key && !keys.has(x.key))) {
+    if (existing.some((e) => e.code === a.code)) await tx.hqAccount.updateMany({ where: { code: a.code, systemKey: null }, data: { systemKey: a.key } });
+    else await tx.hqAccount.create({ data: { code: a.code, name: a.name, type: a.type, systemKey: a.key, isBank: a.isBank ?? false } });
+  }
 }
 
 export async function lockDate(tx: Tx = db) {
@@ -31,12 +40,16 @@ export async function assertOpen(date: Date, tx: Tx = db) {
     throw new HqLockedError(`The books are locked up to ${fmtDate(lock)}, so nothing dated ${fmtDate(date)} can be added or changed. Unlock it under Books → Lock date first.`);
 }
 
-/** Writes a balanced journal. Does nothing if one already exists for this source. */
-export async function postHq(tx: Tx, j: { date: Date; source: string; sourceId: string; reference?: string | null; memo?: string | null; userId?: string | null; lines: HqLineDraft[] }) {
+/**
+ * Writes a balanced journal. Does nothing if one already exists for this source. `yearEnd` is for the Corporation
+ * Tax and closing journals only: they finalise a year that the lock date may already cover (filing a VAT return
+ * locks the books), and they don't touch VAT.
+ */
+export async function postHq(tx: Tx, j: { date: Date; source: string; sourceId: string; reference?: string | null; memo?: string | null; userId?: string | null; lines: HqLineDraft[]; yearEnd?: boolean }) {
   if (!j.lines.length) return null;
   if (!isBalanced(j.lines)) throw new Error(`HQ journal ${j.source} ${j.sourceId} does not balance`);
   if (await tx.hqJournal.findUnique({ where: { source_sourceId: { source: j.source, sourceId: j.sourceId } } })) return null;
-  await assertOpen(j.date, tx);
+  if (!j.yearEnd) await assertOpen(j.date, tx);
   await ensureHqChart(tx);
   const keys = [...new Set(j.lines.flatMap((l) => ("key" in l.account ? [l.account.key] : [])))];
   const byKey = new Map((await tx.hqAccount.findMany({ where: { systemKey: { in: keys } } })).map((a) => [a.systemKey, a.id]));
@@ -49,10 +62,10 @@ export async function postHq(tx: Tx, j: { date: Date; source: string; sourceId: 
 }
 
 /** Removes a document's journal (when a payment is deleted or a sent invoice is changed). Refused in a locked period. */
-export async function unpostHq(tx: Tx, source: string, sourceId: string) {
+export async function unpostHq(tx: Tx, source: string, sourceId: string, opts: { yearEnd?: boolean } = {}) {
   const j = await tx.hqJournal.findUnique({ where: { source_sourceId: { source, sourceId } } });
   if (!j) return;
-  await assertOpen(j.date, tx);
+  if (!opts.yearEnd) await assertOpen(j.date, tx);
   await tx.hqBankTxn.updateMany({ where: { journalId: j.id }, data: { status: "UNMATCHED", journalId: null } });
   await tx.hqJournal.delete({ where: { id: j.id } });
 }
@@ -149,6 +162,32 @@ export async function postBillPayment(tx: Tx, id: string, userId?: string | null
 }
 
 /**
+ * MatrixPOS subscription invoices are Matrix Infotech sales too. Issued: Dr debtors / Cr MatrixPOS subscriptions
+ * and VAT. Paid: into the Stripe balance for card payments, otherwise the main bank account. Voided: reversed.
+ */
+export async function postPosInvoice(tx: Tx, id: string) {
+  const i = await tx.subscriptionInvoice.findUniqueOrThrow({ where: { id } });
+  await postHq(tx, {
+    date: i.issuedAt, source: "POS_INVOICE", sourceId: i.id, reference: i.number, memo: `MatrixPOS: ${i.billToName}`,
+    lines: invoiceJournal({ currency: "GBP", perGbp: 1, totalMinor: i.totalPence, taxMinor: i.vatPence, lines: [{ account: { key: "SALES_POS" }, amountMinor: i.netPence }] }),
+  });
+  if (i.status === "PAID") {
+    const bank = await tx.hqAccount.findFirst({ where: { systemKey: i.method === "CARD" ? "PAYMENTS" : "BANK" } }) ?? (await bankAccount(tx, null));
+    if (bank) await postHq(tx, {
+      date: i.paidAt ?? i.issuedAt, source: "POS_PAYMENT", sourceId: i.id, reference: i.number, memo: `MatrixPOS payment: ${i.billToName}`,
+      lines: receiptJournal({ amountMinor: i.totalPence, currency: "GBP", invoicePerGbp: 1, gbpPence: i.totalPence, bank: { id: bank.id }, bankForeignMinor: i.totalPence }),
+    });
+  }
+  if (i.status === "VOID") {
+    const orig = await tx.hqJournal.findUnique({ where: { source_sourceId: { source: "POS_INVOICE", sourceId: id } }, include: { lines: true } });
+    if (orig) await postHq(tx, {
+      date: new Date(), source: "POS_INVOICE_VOID", sourceId: id, reference: i.number, memo: `MatrixPOS invoice ${i.number} cancelled`,
+      lines: reverse(orig.lines.map((l) => ({ account: { id: l.accountId }, debit: l.debitPence, credit: l.creditPence }))),
+    });
+  }
+}
+
+/**
  * Brings anything not yet in the books into them: invoices sent before the books existed, their payments, and so on.
  * Safe to run any time; each document is posted once. Documents in a locked period are left as they are.
  */
@@ -167,15 +206,21 @@ export async function catchUpBooks() {
   for (const c of await db.hqCreditNote.findMany({ where: { status: "ISSUED" }, select: { id: true } })) if (!cn.has(c.id)) await run((tx) => postCreditNote(tx, c.id));
   for (const b of await db.hqBill.findMany({ select: { id: true } })) if (!bill.has(b.id)) await run((tx) => postBill(tx, b.id));
   for (const p of await db.hqBillPayment.findMany({ select: { id: true } })) if (!billPay.has(p.id)) await run((tx) => postBillPayment(tx, p.id));
+  // MatrixPOS subscription invoices: a void one that never got into the books is left out entirely.
+  const [posInv, posPay, posVoid] = await Promise.all(["POS_INVOICE", "POS_PAYMENT", "POS_INVOICE_VOID"].map(have));
+  for (const i of await db.subscriptionInvoice.findMany({ select: { id: true, status: true } })) {
+    const needs = i.status === "VOID" ? posInv.has(i.id) && !posVoid.has(i.id) : !posInv.has(i.id) || (i.status === "PAID" && !posPay.has(i.id));
+    if (needs) await run((tx) => postPosInvoice(tx, i.id));
+  }
   return n;
 }
 
 /** Debit and credit totals per account for journals dated in [gte, lt). */
-export async function hqBalances(range: { gte?: Date; lt?: Date } = {}): Promise<Balance[]> {
+export async function hqBalances(range: { gte?: Date; lt?: Date } = {}, opts: { exclude?: string[] } = {}): Promise<Balance[]> {
   await ensureHqChart();
   const [accounts, sums] = await Promise.all([
     db.hqAccount.findMany({ orderBy: { code: "asc" } }),
-    db.hqJournalLine.groupBy({ by: ["accountId"], where: { journal: { date: range } }, _sum: { debitPence: true, creditPence: true, foreignMinor: true } }),
+    db.hqJournalLine.groupBy({ by: ["accountId"], where: { journal: { date: range, ...(opts.exclude?.length ? { source: { notIn: opts.exclude } } : {}) } }, _sum: { debitPence: true, creditPence: true, foreignMinor: true } }),
   ]);
   const m = new Map(sums.map((s) => [s.accountId, s._sum]));
   return accounts.map((a) => {

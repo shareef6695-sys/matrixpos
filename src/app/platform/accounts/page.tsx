@@ -2,6 +2,8 @@ import Link from "next/link";
 import { db } from "@/lib/server/db";
 import { requireHq } from "@/lib/server/hq";
 import { catchUpBooks, hqBalances, lockDate } from "@/lib/server/hq-books";
+import { companyYear, hqSettings, taxDeadlines, tradingBalances } from "@/lib/server/hq-vat";
+import { seller } from "@/lib/legal";
 import { PageHeader, Stat } from "@/components/admin";
 import { BooksNav } from "@/components/hq/BooksNav";
 import { profitAndLoss } from "@/lib/hq/books";
@@ -17,14 +19,18 @@ export default async function Books() {
   // Anything sent or paid before the books existed (or while a period was locked) is brought in here.
   await catchUpBooks();
   const today = londonDate();
-  const yearStart = londonDayStart(`${today.slice(0, 4)}-01-01`);
-  const [all, year, lock, unmatched, billsDue] = await Promise.all([
+  const fy = await companyYear(today);
+  const yearStart = londonDayStart(fy.start);
+  const [all, year, lock, unmatched, billsDue, deadlines, settings] = await Promise.all([
     hqBalances(),
-    hqBalances({ gte: yearStart }),
+    tradingBalances({ gte: yearStart }),
     lockDate(),
     db.hqBankTxn.count({ where: { status: "UNMATCHED" } }),
     db.hqBill.count({ where: { status: { in: ["OPEN", "PARTIAL"] } } }),
+    taxDeadlines(today),
+    hqSettings(),
   ]);
+  const yearLabel = fy.end.slice(5) === "12-31" ? fy.end.slice(0, 4) : `to ${fmtDate(fy.end)}`;
   const pl = profitAndLoss(year);
   const by = (k: string) => all.find((a) => a.key === k)?.balance ?? 0;
   const banks = all.filter((a) => a.isBank && (a.debit || a.credit));
@@ -35,8 +41,8 @@ export default async function Books() {
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Clients owe you" value={formatGBP(by("DEBTORS"))} />
         <Stat label="You owe suppliers" value={formatGBP(by("CREDITORS"))} sub={billsDue ? `${billsDue} unpaid bill${billsDue === 1 ? "" : "s"}` : undefined} />
-        <Stat label={`Income ${today.slice(0, 4)}`} value={formatGBP(pl.totalIncome)} />
-        <Stat label={`Profit ${today.slice(0, 4)} (before tax)`} value={formatGBP(pl.netProfit)} />
+        <Stat label={`Income ${yearLabel}`} value={formatGBP(pl.totalIncome)} />
+        <Stat label={`Profit ${yearLabel} (before tax)`} value={formatGBP(pl.netProfit + (year.find((a) => a.key === "CT_EXPENSE")?.balance ?? 0))} />
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="card">
@@ -61,7 +67,19 @@ export default async function Books() {
             <li>Add costs under <Link href="/platform/bills" className="text-violet-700">Bills &amp; expenses</Link>.</li>
             <li>When a month or year is final, set the <Link href="/platform/accounts/settings" className="text-violet-700">lock date</Link>.</li>
           </ol>
-          <p className="mt-3 text-xs text-slate-500">{lock ? `Locked up to ${fmtDate(lock)}.` : "No lock date set."} Not VAT registered, so no VAT is recorded.</p>
+          <p className="mt-3 text-xs text-slate-500">{lock ? `Locked up to ${fmtDate(lock)}.` : "No lock date set."} {settings?.vatRegisteredFrom ? `VAT registered from ${fmtDate(settings.vatRegisteredFrom)}${seller().chargeVat ? "" : " (VAT not switched on yet)"}.` : "Not VAT registered, so no VAT is recorded."}</p>
+        </div>
+        <div className="card text-sm lg:col-span-2">
+          <h2 className="mb-3 font-semibold">Tax deadlines</h2>
+          <ul className="space-y-2">
+            {deadlines.map((d) => (
+              <li key={d.what} className="flex flex-wrap justify-between gap-3">
+                <Link href={d.href} className="text-violet-700">{d.what}</Link>
+                <span className={d.due < today ? "font-semibold text-red-700" : "text-slate-600"}>{d.due < today ? "Was due " : "Due "}{fmtDate(d.due)}</span>
+              </li>
+            ))}
+            {!deadlines.length && <li className="text-slate-500">Nothing yet. Set your <Link href="/platform/accounts/year-end" className="text-violet-700">year end</Link> and, once registered, your <Link href="/platform/accounts/vat" className="text-violet-700">VAT quarters</Link>.</li>}
+          </ul>
         </div>
       </div>
     </div>

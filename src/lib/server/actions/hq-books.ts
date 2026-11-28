@@ -1,5 +1,6 @@
 "use server";
 import { randomUUID } from "node:crypto";
+import { chargesVatOn } from "@/lib/server/hq-vat";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -191,7 +192,7 @@ export async function saveBill(_: FormState, f: FormData): Promise<FormState> {
   if (dueDate < date) return { error: "The due date can't be before the bill date" };
   const rate = await documentRate(currency, str(f, "perGbp", 30), date);
   if (typeof rate === "string") return { error: rate };
-  const parsed = parseBillLines(String(f.get("lines") ?? "[]"), currency, seller().chargeVat);
+  const parsed = parseBillLines(String(f.get("lines") ?? "[]"), currency, await chargesVatOn(date));
   if ("error" in parsed) return { error: parsed.error };
   const okAccounts = new Set((await db.hqAccount.findMany({ where: { id: { in: parsed.lines.map((l) => l.accountId) }, isBank: false, archived: false }, select: { id: true } })).map((a) => a.id));
   if (parsed.lines.some((l) => !okAccounts.has(l.accountId))) return { error: "Choose what each line was for from the list" };
