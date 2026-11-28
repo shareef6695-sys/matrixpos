@@ -30,7 +30,7 @@ Not collected anywhere: dates of birth (age checks store only "age verified: yes
 
 | Store | What | Protection |
 |---|---|---|
-| Postgres (Supabase), via Prisma on the server | Everything above | Row level security on, Supabase `anon`/`authenticated` roles revoked. Passwords and PINs bcrypt. Reset/verify tokens SHA-256. Card provider keys and TOTP secrets AES-256-GCM. Rate-limit keys HMAC-SHA-256. |
+| Postgres (self-hosted Supabase on a LightNode VPS in London), via Prisma on the server | Everything above | Row level security on, Supabase `anon`/`authenticated` roles revoked. Passwords and PINs bcrypt. Reset/verify tokens SHA-256. Card provider keys and TOTP secrets AES-256-GCM. Rate-limit keys HMAC-SHA-256. |
 | Cookies `mpos_admin`, `mpos_device`, `mpos_till`, `mpos_mfa` | Signed JWTs with ids, role and session version only. No names or emails. | `httpOnly`, `sameSite=lax`, `secure` in production, `path=/` |
 | Till browser (IndexedDB, `idb-keyval`) | Product list, shop details, signed-in cashier's id, name and role, and unsent sales | Unsent sales hold only ids, no customer or cashier names. Removed once synced. |
 | `localStorage` / `sessionStorage` | Nothing | Checked by `tests/privacy.test.ts` |
@@ -44,7 +44,7 @@ Not collected anywhere: dates of birth (age checks store only "age verified: yes
 | Stripe Billing (MatrixPOS's account) | Shops paying their subscription by card | Business name, owner email, organisation id (metadata), plan | Staff, customers, sales |
 | Stripe Terminal / SumUp / Dojo (the shop's own account) | Card payments at the till | Amount, currency, sale id (as reference), reader id | Customer name, basket, staff |
 | Resend or SMTP mailbox | Verification, password reset, password changed, account closing, invoices | Recipient email, name in the greeting, the link or invoice details | Anything else |
-| Supabase | Database hosting | Everything in section 2 | |
+| LightNode (London VPS running self-hosted Supabase) | Database hosting and backups | Everything in section 2 | |
 | Vercel | Hosting, logs | Requests (with IP addresses, held by Vercel), redacted error logs | |
 
 No analytics, error tracking, advertising or AI services are used. No web fonts are loaded (system fonts only) and two-step QR codes are drawn on the server, so nothing goes to font or QR services.
@@ -68,7 +68,7 @@ No analytics, error tracking, advertising or AI services are used. No web fonts 
 6. **Browser storage.** Unsent till sales kept the loyalty customer's and cashier's names in IndexedDB. Those display-only fields are now dropped before storing.
 7. **API responses.** The till's receipt lookup returned the whole sale with cashier, customer id, payments and references; it now returns only what the refund screen shows. Opening a shift returns only id, time and float. Override approval returns only the approver's name. Export CSVs are `no-store`.
 8. **Deletion.** Added staff erasure. Deleting a closed business used to delete MatrixPOS's own subscription invoices too (needed for 6 years); they are now kept and anonymised.
-9. **Privacy policy** now lists Stripe and what the email provider receives, and describes the hashed sign-in records and invoice retention.
+9. **Privacy policy** now lists Stripe and what the email provider receives, says the database is self-hosted Supabase on the London LightNode server, and describes the hashed sign-in records and invoice retention.
 
 ## 6. Checked and already fine
 
@@ -80,6 +80,5 @@ No analytics, error tracking, advertising or AI services are used. No web fonts 
 
 ## 7. Open points for the owner
 
-- The privacy policy says the database is hosted by LightNode, but production uses Supabase. Update the processor list with Supabase and the region your project is in.
 - Card payment references (`Payment.reference`) can hold the last 4 card digits keyed by the cashier. That is not sensitive card data under PCI DSS, but avoid asking cashiers to type anything more.
 - Shop customers have no self-service deletion; requests go to the shop, which erases them in the back office. That matches the processor role.

@@ -35,7 +35,7 @@ export default function Privacy() {
       <h2>Where it is kept and who helps us</h2>
       <p>The {LEGAL.product} database runs on servers in the United Kingdom. We use these service providers, each bound by a contract to protect the data:</p>
       <ul>
-        <li>LightNode, which hosts the database and its nightly backups on a server in the United Kingdom.</li>
+        <li>LightNode, which hosts our server in London. The database (Supabase, run by us on that server) and its nightly backups stay there. No Supabase cloud service receives the data.</li>
         <li>Vercel, which runs the website from its London region. Vercel is a US company. Any transfer outside the UK is covered by the UK International Data Transfer Addendum or the UK–US data bridge.</li>
         <li>Our email delivery provider, which sends account emails. It receives your name, email address and the email itself.</li>
         <li>Stripe, if you pay your subscription by card. It receives your business name, email address and an internal account reference; you give your card and billing address to Stripe directly.</li>
