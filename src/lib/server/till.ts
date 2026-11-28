@@ -6,6 +6,7 @@ import { compare, getDevice, getTillUser } from "./auth";
 import { atLeast, type Role } from "@/lib/session";
 import type { Prisma } from "@prisma/client";
 import { postSale } from "./accounting";
+import { UserError } from "./errors";
 
 export const json = (data: unknown, status = 200) => NextResponse.json(data, { status });
 export const fail = (error: string, status = 400) => NextResponse.json({ error }, { status });
@@ -102,11 +103,11 @@ export async function recordSale(orgId: string, storeId: string, registerId: str
 
   const linesTotal = s.lines.reduce((a, l) => a + l.netPence, 0);
   const paid = s.payments.reduce((a, p) => a + p.amountPence, 0);
-  if (linesTotal !== s.totalPence) throw new Error("Line totals do not match the sale total");
-  if (paid - s.changePence !== s.totalPence) throw new Error("Payments do not match the sale total");
+  if (linesTotal !== s.totalPence) throw new UserError("Line totals do not match the sale total");
+  if (paid - s.changePence !== s.totalPence) throw new UserError("Payments do not match the sale total");
 
   const user = await db.user.findFirst({ where: { id: s.userId, organizationId: orgId } });
-  if (!user) throw new Error("Unknown cashier");
+  if (!user) throw new UserError("Unknown cashier");
   const settings = await db.orgSettings.findUnique({ where: { organizationId: orgId } });
   const productIds = [...new Set(s.lines.map((l) => l.productId).filter(Boolean) as string[])];
   const products = await db.product.findMany({ where: { id: { in: productIds }, organizationId: orgId }, select: { id: true, trackStock: true } });

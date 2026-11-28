@@ -1,9 +1,10 @@
 import { db } from "@/lib/server/db";
 import { getTillUser } from "@/lib/server/auth";
 import { deviceContext, json } from "@/lib/server/till";
+import { apiRoute } from "@/lib/server/errors";
 
 /** Everything a till needs to sell offline: business details, settings, catalogue, offers. */
-export async function GET() {
+export const GET = apiRoute("GET /api/till/bootstrap", async () => {
   const ctx = await deviceContext();
   if (!ctx) return json({ device: null });
   const { device, register } = ctx;
@@ -51,4 +52,4 @@ export async function GET() {
     user,
     shift: shift ? { id: shift.id, openedAt: shift.openedAt, openingFloatPence: shift.openingFloatPence } : null,
   });
-}
+});

@@ -7,6 +7,8 @@ import "server-only";
  * These calls follow each provider's published REST API; test with your sandbox keys before going live.
  */
 import type { OrgSettings, Register } from "@prisma/client";
+import { UserError } from "./errors";
+import { redact } from "./redact";
 
 export type ProviderId = "STRIPE_TERMINAL" | "SUMUP" | "DOJO";
 export type PaymentState = "PENDING" | "APPROVED" | "DECLINED" | "CANCELLED";
@@ -19,19 +21,27 @@ interface Ctx { settings: OrgSettings; register: Register }
 async function call(url: string, init: RequestInit) {
   const res = await fetch(url, { ...init, cache: "no-store" });
   const text = await res.text();
-  const body = text ? JSON.parse(text) : {};
-  if (!res.ok) throw new Error(body?.error?.message ?? body?.message ?? `Provider error ${res.status}`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let body: any = {};
+  try { body = text ? JSON.parse(text) : {}; } catch { body = {}; }
+  if (!res.ok) {
+    // Stripe, SumUp and Dojo write these messages for people ("Reader is currently busy"), so the cashier sees them.
+    // The full response is logged on the server; only the message, redacted and shortened, goes to the till.
+    console.error(`Card provider ${new URL(url).host} returned ${res.status}:`, redact(text.slice(0, 2000)));
+    const msg = body?.error?.message ?? body?.message;
+    throw new UserError(typeof msg === "string" && msg ? `Card machine: ${redact(msg).slice(0, 200)}` : `The card machine service returned an error (${res.status})`);
+  }
   return body;
 }
 
 // ---- Stripe Terminal (server-driven integration) ----
 const stripe = {
   headers(ctx: Ctx) {
-    if (!ctx.settings.stripeSecretKey) throw new Error("Stripe secret key is not set in Settings");
+    if (!ctx.settings.stripeSecretKey) throw new UserError("Stripe secret key is not set in Settings");
     return { Authorization: `Bearer ${ctx.settings.stripeSecretKey}`, "Content-Type": "application/x-www-form-urlencoded" };
   },
   reader(ctx: Ctx) {
-    if (!ctx.register.stripeReaderId) throw new Error("No Stripe reader is linked to this till");
+    if (!ctx.register.stripeReaderId) throw new UserError("No Stripe reader is linked to this till");
     return ctx.register.stripeReaderId;
   },
   async start(ctx: Ctx, amountPence: number, saleId: string): Promise<StartResult> {
@@ -60,8 +70,8 @@ const stripe = {
 // ---- SumUp Cloud API (Solo readers) ----
 const sumup = {
   base(ctx: Ctx) {
-    if (!ctx.settings.sumupApiKey || !ctx.settings.sumupMerchantCode) throw new Error("SumUp API key and merchant code are not set in Settings");
-    if (!ctx.register.sumupReaderId) throw new Error("No SumUp reader is linked to this till");
+    if (!ctx.settings.sumupApiKey || !ctx.settings.sumupMerchantCode) throw new UserError("SumUp API key and merchant code are not set in Settings");
+    if (!ctx.register.sumupReaderId) throw new UserError("No SumUp reader is linked to this till");
     return {
       url: `https://api.sumup.com/v0.1/merchants/${encodeURIComponent(ctx.settings.sumupMerchantCode)}`,
       headers: { Authorization: `Bearer ${ctx.settings.sumupApiKey}`, "Content-Type": "application/json" },
@@ -94,11 +104,11 @@ const sumup = {
 // ---- Dojo (Payment intents + terminal sessions) ----
 const dojo = {
   headers(ctx: Ctx) {
-    if (!ctx.settings.dojoApiKey) throw new Error("Dojo API key is not set in Settings");
+    if (!ctx.settings.dojoApiKey) throw new UserError("Dojo API key is not set in Settings");
     return { Authorization: `Basic ${ctx.settings.dojoApiKey}`, version: "2024-02-05", "Content-Type": "application/json" };
   },
   terminal(ctx: Ctx) {
-    if (!ctx.register.dojoTerminalId) throw new Error("No Dojo terminal is linked to this till");
+    if (!ctx.register.dojoTerminalId) throw new UserError("No Dojo terminal is linked to this till");
     return ctx.register.dojoTerminalId;
   },
   async start(ctx: Ctx, amountPence: number, saleId: string): Promise<StartResult> {

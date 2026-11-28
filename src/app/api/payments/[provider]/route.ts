@@ -1,11 +1,11 @@
 import { db } from "@/lib/server/db";
 import { tillContext, json, fail } from "@/lib/server/till";
 import { providers, providerEnabled, type ProviderId } from "@/lib/server/payments";
-import { safeErrorMessage } from "@/lib/server/redact";
 import { withOpenSecrets } from "@/lib/server/secret-box";
+import { apiRoute, publicMessage } from "@/lib/server/errors";
 
 /** POST { action: "start", amountPence, saleId } | { action: "status", ref } | { action: "cancel", ref } */
-export async function POST(req: Request, { params }: { params: Promise<{ provider: string }> }) {
+export const POST = apiRoute("POST /api/payments/[provider]", async (req: Request, { params }: { params: Promise<{ provider: string }> }) => {
   const ctx = await tillContext();
   if (!ctx) return fail("Sign in at the till first", 401);
   const id = (await params).provider.toUpperCase() as ProviderId;
@@ -29,6 +29,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
     if (body.action === "cancel") { await p.cancel(call, String(body.ref)); return json({ ok: true }); }
     return fail("Unknown action");
   } catch (e) {
-    return fail(safeErrorMessage(e, "Payment provider error"), 502);
+    return fail(await publicMessage(e, `card payment ${id} ${String(body.action)}`, "The card machine couldn't be reached. Try again, or take the payment another way"), 502);
   }
-}
+});

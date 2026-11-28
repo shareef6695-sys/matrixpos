@@ -2,9 +2,10 @@ import type Stripe from "stripe";
 import { stripe, syncSubscription } from "@/lib/server/stripe-billing";
 import { audit } from "@/lib/server/till";
 import { saveStripeInvoice } from "@/lib/server/invoices";
+import { apiRoute } from "@/lib/server/errors";
 
 /** Stripe tells us about subscription payments here. Add this URL as a webhook endpoint in Stripe. */
-export async function POST(req: Request) {
+export const POST = apiRoute("POST /api/stripe/webhook", async (req: Request) => {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret || !process.env.STRIPE_BILLING_SECRET_KEY) return new Response("Stripe billing is not set up", { status: 503 });
   const body = await req.text();
@@ -45,4 +46,4 @@ export async function POST(req: Request) {
     }
   }
   return Response.json({ received: true });
-}
+});

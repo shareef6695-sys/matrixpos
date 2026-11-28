@@ -1,11 +1,12 @@
 "use client";
-import { useEffect } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 
-/** Shown instead of a blank "Application error" page when something goes wrong on the server. */
+/**
+ * Shown instead of a blank "Application error" page when something goes wrong on the server.
+ * In production Next.js sends only a generic message and a digest (the code below); the full error is in the server logs.
+ */
 export default function ErrorPage({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  useEffect(() => { console.error(error); }, [error]);
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <div className="card w-full max-w-md text-center">

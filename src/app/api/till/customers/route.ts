@@ -1,8 +1,9 @@
 import { db } from "@/lib/server/db";
 import { tillContext, json, fail } from "@/lib/server/till";
+import { apiRoute } from "@/lib/server/errors";
 
 /** Loyalty lookup by card code, phone or email. */
-export async function GET(req: Request) {
+export const GET = apiRoute("GET /api/till/customers", async (req: Request) => {
   const ctx = await tillContext();
   if (!ctx) return fail("Sign in at the till first", 401);
   const q = new URL(req.url).searchParams.get("q")?.trim();
@@ -12,4 +13,4 @@ export async function GET(req: Request) {
     take: 8, select: { id: true, name: true, loyaltyCode: true, points: true },
   });
   return json({ customers });
-}
+});

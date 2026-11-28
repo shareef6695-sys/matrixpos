@@ -8,6 +8,9 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.svg" },
 };
 
+// Every page is rendered per request, so it carries the Content-Security-Policy nonce set in middleware.
+export const dynamic = "force-dynamic";
+
 export const viewport: Viewport = { themeColor: "#0f766e", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

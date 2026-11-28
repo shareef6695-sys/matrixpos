@@ -7,7 +7,7 @@ import { ensureChart } from "@/lib/server/accounting";
 import { compare, hash, hashPin, cookieOpts, passwordProblem } from "@/lib/server/auth";
 import { applyPlanToSettings } from "@/lib/server/billing";
 import { sendVerificationEmail } from "@/lib/server/account";
-import { clientIp, isLimited, recordAttempt } from "@/lib/server/ratelimit";
+import { clientIp, isLimited, overLimit, recordAttempt } from "@/lib/server/ratelimit";
 import { verifyTotp } from "@/lib/server/totp";
 import { openSecret } from "@/lib/server/secret-box";
 import { TRIAL_DAYS } from "@/lib/plans";
@@ -20,6 +20,7 @@ export type FormState = { error?: string; ok?: string } | undefined;
 
 const safeNext = (n: string) => (n.startsWith("/") && !n.startsWith("//") ? n : "/admin");
 const TOO_MANY = "Too many sign-in attempts. Please wait 15 minutes, or reset your password.";
+const TOO_FAST = "Too many sign-in attempts from this connection. Please wait a minute and try again.";
 
 export async function startSession(user: { id: string; organizationId: string; role: "OWNER" | "MANAGER" | "SUPERVISOR" | "CASHIER"; name: string; sessionVersion: number }) {
   const token = await sign({ kind: "admin", userId: user.id, orgId: user.organizationId, role: user.role, v: user.sessionVersion }, ADMIN_MAX_AGE);
@@ -31,6 +32,8 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
   const password = String(form.get("password") ?? "");
   const ip = await clientIp();
   const keys = [`email:${email}`, `ip:${ip}`];
+  // At most 5 sign-in attempts a minute from one IP address, and 5 wrong passwords per account in 15 minutes.
+  if (await overLimit(`login:${ip}`, 5, 1)) return { error: TOO_FAST };
   if ((await isLimited(keys[0], 5, 15)) || (await isLimited(keys[1], 30, 15))) return { error: TOO_MANY };
 
   const user = await db.user.findUnique({ where: { email } });
@@ -58,6 +61,7 @@ export async function verifyLoginCode(_: FormState, form: FormData): Promise<For
   const pending = await verify<MfaSession>(jar.get(MFA_COOKIE)?.value, "mfa");
   if (!pending) return { error: "That took too long. Please sign in again." };
   const key = `mfa:${pending.userId}`;
+  if (await overLimit(`mfa:${await clientIp()}`, 5, 1)) return { error: TOO_FAST };
   if (await isLimited(key, 5, 15)) return { error: TOO_MANY };
   const user = await db.user.findUnique({ where: { id: pending.userId } });
   if (!user?.active || !user.totpSecret) return { error: "Please sign in again." };
@@ -96,7 +100,7 @@ export async function signup(_: FormState, form: FormData): Promise<FormState> {
   const pwProblem = passwordProblem(d.password);
   if (pwProblem) return { error: pwProblem };
   const ip = await clientIp();
-  if (await isLimited(`signup:${ip}`, 10, 60)) return { error: "Too many sign-ups from this connection. Please try again later." };
+  if ((await overLimit(`signup-try:${ip}`, 5, 1)) || (await isLimited(`signup:${ip}`, 10, 60))) return { error: "Too many sign-ups from this connection. Please try again later." };
   if (await db.user.findUnique({ where: { email: d.email } })) return { error: "An account with that email already exists. Try signing in or resetting your password." };
 
   const base = d.business.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "shop";

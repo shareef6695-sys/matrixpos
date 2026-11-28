@@ -4,6 +4,7 @@ import { Logo } from "@/components/Logo";
 import { PricingCards } from "@/components/Pricing";
 import { TRIAL_DAYS } from "@/lib/plans";
 import { seller } from "@/lib/legal";
+import { showDemoLogin } from "@/lib/server/demo";
 
 const faqs = [
   ["Do I need a card to start?", `No. Every plan is free for ${TRIAL_DAYS} days and we don't ask for card details. Pick a plan when you're happy.`],
@@ -45,7 +46,7 @@ export default function Home() {
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href="/signup" className="btn-primary px-6 py-3 text-base">Create your shop</Link>
-          <Link href="/login" className="btn-secondary px-6 py-3 text-base">Try the demo</Link>
+          <Link href="/login" className="btn-secondary px-6 py-3 text-base">{showDemoLogin() ? "Try the demo" : "Sign in"}</Link>
         </div>
         <p className="mt-4 text-sm text-slate-500">From £12 a month. {TRIAL_DAYS}-day free trial, no card needed.</p>
       </section>

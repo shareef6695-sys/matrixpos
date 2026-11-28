@@ -26,6 +26,18 @@ export async function isLimited(key: string, max: number, minutes: number) {
   return n >= max;
 }
 
+/**
+ * Counts every request under `key`, successful or not, e.g. "5 sign-in attempts a minute from one IP address".
+ * Returns true when the limit is reached (refuse the request); otherwise records this request and returns false.
+ */
+export async function overLimit(key: string, max: number, minutes: number) {
+  const k = attemptKey(`rate:${key}`);
+  const n = await db.loginAttempt.count({ where: { key: k, createdAt: { gte: new Date(Date.now() - minutes * 60_000) } } });
+  if (n >= max) return true;
+  await db.loginAttempt.create({ data: { key: k, success: true } });
+  return false;
+}
+
 export async function recordAttempt(keys: string[], success: boolean) {
   await db.loginAttempt.createMany({ data: keys.map((key) => ({ key: attemptKey(key), success })) });
   // A successful sign-in clears that account's failures.
