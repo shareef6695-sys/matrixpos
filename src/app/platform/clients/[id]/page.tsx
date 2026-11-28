@@ -10,7 +10,7 @@ import { Timeline } from "@/components/hq/Timeline";
 import { Pill } from "@/components/hq/ui";
 import { saveClient, saveContact } from "@/lib/server/actions/hq-crm";
 import { currencies, formatMoney } from "@/lib/hq/money";
-import { INVOICE_STATUS, QUOTE_STATUS, LEAD_STAGE_LABEL } from "@/lib/hq/labels";
+import { INVOICE_STATUS, QUOTE_STATUS, LEAD_STAGE_LABEL, PROJECT_STATUS, CONTRACT_STATUS } from "@/lib/hq/labels";
 import { fmtDate } from "@/lib/dates";
 
 export const metadata = { title: "Client" };
@@ -25,6 +25,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       quotes: { orderBy: { issueDate: "desc" }, take: 50 },
       invoices: { orderBy: { issueDate: "desc" }, take: 100 },
       leads: { orderBy: { createdAt: "desc" } },
+      projects: { orderBy: { createdAt: "desc" }, take: 50 },
+      contracts: { orderBy: [{ endDate: { sort: "asc", nulls: "last" } }], take: 50 },
       notesLog: { orderBy: { createdAt: "desc" }, take: 100 },
     },
   });
@@ -68,6 +70,22 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                   {!c.quotes.length && <tr><td colSpan={5} className="text-center text-slate-500">No quotes yet.</td></tr>}
                 </tbody>
               </table>
+            </div>
+          )}
+          {(h.can("projects.view") || h.can("contracts.view")) && (
+            <div className="card grid gap-4 text-sm sm:grid-cols-2">
+              {h.can("projects.view") && (
+                <div>
+                  <div className="mb-2 flex items-center justify-between"><h2 className="font-semibold">Projects</h2>{h.can("projects.edit") && <Link href={`/platform/projects?client=${c.id}`} className="text-xs text-violet-700">New project</Link>}</div>
+                  <ul className="space-y-1">{c.projects.map((p) => <li key={p.id}><Link className="font-semibold text-violet-700" href={`/platform/projects/${p.id}`}>{p.name}</Link> <Pill s={p.status} map={PROJECT_STATUS} /></li>)}{!c.projects.length && <li className="text-slate-500">None.</li>}</ul>
+                </div>
+              )}
+              {h.can("contracts.view") && (
+                <div>
+                  <div className="mb-2 flex items-center justify-between"><h2 className="font-semibold">Contracts</h2>{h.can("contracts.edit") && <Link href={`/platform/contracts/new?client=${c.id}`} className="text-xs text-violet-700">New contract</Link>}</div>
+                  <ul className="space-y-1">{c.contracts.map((x) => <li key={x.id}><Link className="font-semibold text-violet-700" href={`/platform/contracts/${x.id}`}>{x.title}</Link> <Pill s={x.status} map={CONTRACT_STATUS} />{x.endDate && <span className="text-xs text-slate-500"> ends {fmtDate(x.endDate)}</span>}</li>)}{!c.contracts.length && <li className="text-slate-500">None.</li>}</ul>
+                </div>
+              )}
             </div>
           )}
           {h.can("leads.view") && c.leads.length > 0 && (

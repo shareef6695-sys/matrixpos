@@ -26,11 +26,12 @@ let k = 1;
 interface BillRow { key: number; description: string; accountId: string; amount: string; taxPct: string }
 export interface BillDefaults {
   id?: string; isExpense: boolean; supplierId?: string; payee?: string; reference?: string; date: string; dueDate?: string;
-  currency?: string; perGbp?: string; notes?: string; bankAccountId?: string;
+  currency?: string; perGbp?: string; notes?: string; bankAccountId?: string; projectId?: string;
   lines?: { description: string; accountId: string; amount: string; taxPct: string }[];
 }
 
-export function BillForm({ action, defaults, suppliers, accounts, banks, currencies, chargeVat }: {
+export function BillForm({ action, defaults, suppliers, accounts, banks, currencies, chargeVat, projects = [] }: {
+  projects?: { id: string; name: string }[];
   action: (s: FormState, f: FormData) => Promise<FormState>;
   defaults: BillDefaults;
   suppliers: { id: string; name: string; currency: string }[];
@@ -62,6 +63,12 @@ export function BillForm({ action, defaults, suppliers, accounts, banks, currenc
         <div><label className="label">Their reference</label><input name="reference" className="input" defaultValue={defaults.reference} placeholder="Invoice or receipt number" /></div>
         <div><label className="label">Currency</label><select name="currency" className="input" value={currency} onChange={(ev) => setCurrency(ev.target.value)}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></div>
         {currency !== "GBP" && <div><label className="label">£1 = ? {currency}</label><input name="perGbp" className="input" inputMode="decimal" defaultValue={defaults.perGbp} placeholder="Blank = saved rate" /></div>}
+        {projects.length > 0 && (
+          <div className="sm:col-span-2">
+            <label className="label">For a project (optional)</label>
+            <select name="projectId" className="input" defaultValue={defaults.projectId ?? ""}><option value="">None</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+          </div>
+        )}
         {e && (
           <div className="sm:col-span-2">
             <label className="label">Paid from</label>

@@ -14,12 +14,12 @@ export default async function EditInvoice({ params }: { params: Promise<{ id: st
   const inv = await db.hqInvoice.findUnique({ where: { id }, include: { lines: { orderBy: { position: "asc" } }, _count: { select: { payments: true } } } });
   if (!inv) notFound();
   if ((inv.status !== "DRAFT" && inv.status !== "SENT") || inv._count.payments) redirect(`/platform/invoices/${id}`);
-  const data = await documentFormData();
+  const data = await documentFormData(inv.projectId);
   return (
     <div>
       <PageHeader title={`Edit invoice ${inv.number}`} sub={inv.status === "SENT" ? "This invoice has been sent. The client's link shows your changes straight away, so let them know." : undefined} />
       <DocumentForm kind="invoice" action={saveInvoice} {...data} defaults={{
-        id: inv.id, clientId: inv.clientId, title: inv.title ?? "", currency: inv.currency, perGbp: inv.currency === "GBP" ? "" : String(Number(inv.perGbp)),
+        id: inv.id, clientId: inv.clientId, projectId: inv.projectId ?? undefined, title: inv.title ?? "", currency: inv.currency, perGbp: inv.currency === "GBP" ? "" : String(Number(inv.perGbp)),
         issueDate: ymd(inv.issueDate)!, endDate: ymd(inv.dueDate), notes: inv.notes ?? "", terms: inv.terms ?? "", lines: linesForForm(inv.lines, inv.currency),
       }} />
     </div>

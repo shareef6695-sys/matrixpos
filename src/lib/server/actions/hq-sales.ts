@@ -141,7 +141,12 @@ export async function saveInvoice(_: FormState, f: FormData): Promise<FormState>
   const id = opt(f, "id", 40);
   const d = await readDocument(f, "invoice");
   if ("error" in d) return { error: d.error };
+  // Which project it's for, so the project shows what's been invoiced.
+  const projectId = opt(f, "projectId", 40);
+  const project = projectId ? await db.hqProject.findUnique({ where: { id: projectId } }) : null;
+  if (projectId && (!project || (project.clientId && project.clientId !== d.client.id))) return { error: "That project belongs to another client" };
   const data = {
+    projectId: project?.id ?? null,
     clientId: d.client.id, title: d.title, issueDate: d.issueDate, dueDate: d.end, currency: d.currency, perGbp: d.rate,
     ...d.totals, notes: d.notes, terms: d.terms, ...billTo(d.client),
   };
@@ -194,6 +199,8 @@ export async function invoiceAction(f: FormData) {
     else {
       const r = await guarded(() => db.$transaction(async (tx) => {
         await tx.hqInvoice.update({ where: { id }, data: { status: "VOID", voidedAt: new Date() } });
+        // Time billed on it can be invoiced again.
+        await tx.hqTimeEntry.updateMany({ where: { invoiceId: id }, data: { invoiceId: null } });
         await postInvoiceVoid(tx, id, h.userId);
       }));
       if (isLocked(r)) msg = r.locked;

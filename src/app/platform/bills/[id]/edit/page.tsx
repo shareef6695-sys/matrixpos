@@ -15,12 +15,12 @@ export default async function EditBill({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const b = await db.hqBill.findUnique({ where: { id }, include: { lines: { orderBy: { position: "asc" } }, payments: true } });
   if (!b || b.status === "VOID" || (!b.isExpense && b.payments.length)) notFound();
-  const data = await billFormData();
+  const data = await billFormData(b.projectId);
   return (
     <div>
       <PageHeader title={`Edit ${b.isExpense ? "expense" : "bill"}`} />
       <BillForm action={saveBill} {...data} defaults={{
-        id: b.id, isExpense: b.isExpense, supplierId: b.supplierId ?? undefined, payee: b.payee, reference: b.reference ?? undefined, date: ymd(b.date)!, dueDate: ymd(b.dueDate),
+        id: b.id, projectId: b.projectId ?? undefined, isExpense: b.isExpense, supplierId: b.supplierId ?? undefined, payee: b.payee, reference: b.reference ?? undefined, date: ymd(b.date)!, dueDate: ymd(b.dueDate),
         currency: b.currency, perGbp: b.currency === "GBP" ? undefined : String(Number(b.perGbp)), notes: b.notes ?? undefined, bankAccountId: b.payments[0]?.bankAccountId,
         lines: b.lines.map((l) => ({ description: l.description, accountId: l.accountId, amount: minorToInput(l.netMinor, b.currency), taxPct: Number(l.taxPct) ? String(Number(l.taxPct)) : "" })),
       }} />

@@ -849,6 +849,8 @@ model HqClient {
   invoices  HqInvoice[]
   notesLog  HqNote[]
   recurring HqRecurring[]
+  projects  HqProject[]
+  contracts HqContract[]
 
   @@index([name])
 }
@@ -1017,6 +1019,9 @@ model HqInvoice {
   creditNotes   HqCreditNote[]
   hqRecurring   HqRecurring?   @relation(fields: [hqRecurringId], references: [id])
   hqRecurringId String?
+  project       HqProject?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId     String?
+  timeEntries   HqTimeEntry[]
 
   @@index([status, dueDate])
   @@index([issueDate])
@@ -1176,6 +1181,9 @@ model HqBill {
   createdById String?
   createdAt   DateTime     @default(now())
 
+  project   HqProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId String? // a cost for a client project (freelancer, licence)
+
   lines    HqBillLine[]
   payments HqBillPayment[]
 
@@ -1297,4 +1305,169 @@ model HqBankTxn {
   createdAt   DateTime        @default(now())
 
   @@index([accountId, status, date])
+}
+
+// ---------------- Matrix HQ: projects, time and contracts (phase 3) ----------------
+
+enum HqProjectStatus {
+  PLANNED
+  ACTIVE
+  ON_HOLD
+  DONE
+  CANCELLED
+}
+
+enum HqBilling {
+  FIXED // a fixed price, invoiced in stages
+  HOURLY // time is invoiced at the hourly rate
+  NONE // internal or not billed
+}
+
+model HqProject {
+  id          String          @id @default(cuid())
+  client      HqClient?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId    String? // blank = internal project
+  name        String
+  status      HqProjectStatus @default(ACTIVE)
+  billing     HqBilling       @default(FIXED)
+  currency    String          @default("GBP")
+  budgetMinor Int             @default(0) // fixed price, or budget for hourly work
+  rateMinor   Int             @default(0) // hourly rate, in the project's currency
+  budgetHours Decimal?        @db.Decimal(10, 2)
+  startDate   DateTime?
+  dueDate     DateTime?
+  description String?
+  managerId   String? // HQ user in charge
+  quoteId     String?
+  createdById String?
+  createdAt   DateTime        @default(now())
+
+  tasks    HqTask[]
+  time     HqTimeEntry[]
+  invoices HqInvoice[]
+  bills    HqBill[]
+  timers   HqTimer[]
+
+  @@index([status])
+  @@index([clientId])
+}
+
+enum HqTaskStatus {
+  TODO
+  DOING
+  REVIEW
+  DONE
+}
+
+enum HqPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model HqTask {
+  id              String       @id @default(cuid())
+  project         HqProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId       String
+  title           String
+  description     String?
+  status          HqTaskStatus @default(TODO)
+  priority        HqPriority   @default(NORMAL)
+  assigneeId      String?
+  dueDate         DateTime?
+  estimateMinutes Int?
+  position        Int          @default(0)
+  doneAt          DateTime?
+  createdById     String?
+  createdAt       DateTime     @default(now())
+
+  time   HqTimeEntry[]
+  timers HqTimer[]
+
+  @@index([projectId, status])
+  @@index([assigneeId, status])
+}
+
+model HqTimeEntry {
+  id          String     @id @default(cuid())
+  project     HqProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  task        HqTask?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  taskId      String?
+  userId      String
+  date        DateTime
+  minutes     Int
+  description String?
+  billable    Boolean    @default(true)
+  invoice     HqInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceId   String? // set once the time is on an invoice
+  createdAt   DateTime   @default(now())
+
+  @@index([projectId, date])
+  @@index([userId, date])
+  @@index([invoiceId])
+}
+
+/**
+ * A running timer: one per person at a time.
+ */
+model HqTimer {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  project     HqProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  task        HqTask?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  taskId      String?
+  description String?
+  startedAt   DateTime  @default(now())
+}
+
+enum HqContractStatus {
+  DRAFT
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum HqContractKind {
+  SUPPORT
+  HOSTING
+  MAINTENANCE
+  LICENCE // a third-party licence you resell and must renew
+  DEVELOPMENT
+  SERVICE
+  OTHER
+}
+
+/**
+ * A client agreement with an end date: support, hosting, a resold licence. Renews automatically if set.
+ */
+model HqContract {
+  id           String           @id @default(cuid())
+  client       HqClient         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId     String
+  title        String
+  kind         HqContractKind   @default(SERVICE)
+  status       HqContractStatus @default(ACTIVE)
+  reference    String? // the vendor's licence or order number
+  vendor       String? // for resold licences
+  startDate    DateTime
+  endDate      DateTime?
+  autoRenew    Boolean          @default(false)
+  renewMonths  Int              @default(12)
+  noticeDays   Int              @default(30) // remind this many days before it ends
+  currency     String           @default("GBP")
+  valueMinor   Int              @default(0) // per term
+  costMinor    Int? // what it costs you per term (resold licences)
+  terms        String?
+  notes        String?
+  recurringId  String? // the repeating invoice that bills it
+  remindedFor  DateTime? // the end date the last reminder was sent for
+  renewedCount Int              @default(0)
+  createdById  String?
+  createdAt    DateTime         @default(now())
+
+  @@index([status, endDate])
+  @@index([clientId])
 }

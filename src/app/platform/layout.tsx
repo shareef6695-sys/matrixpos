@@ -12,6 +12,11 @@ const NAV: { title: string | null; items: [string, string, IconName, HqPermissio
     ["/platform/leads", "Leads", "leads", "leads.view"],
     ["/platform/clients", "Clients", "clients", "clients.view"],
     ["/platform/quotes", "Quotes", "quotes", "quotes.view"],
+    ["/platform/contracts", "Contracts", "contracts", "contracts.view"],
+  ] },
+  { title: "Work", items: [
+    ["/platform/projects", "Projects", "projects", "projects.view"],
+    ["/platform/time", "Time", "time", "time.log"],
   ] },
   { title: "Money", items: [
     ["/platform/invoices", "Invoices", "invoices", "invoices.view"],

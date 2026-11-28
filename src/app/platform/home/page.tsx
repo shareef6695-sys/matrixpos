@@ -7,6 +7,7 @@ import { formatGBP } from "@/lib/pos/money";
 import { LEAD_STAGES, LEAD_STAGE_LABEL, INVOICE_STATUS } from "@/lib/hq/labels";
 import { fmtDate, londonDate, londonDayStart } from "@/lib/dates";
 import { Pill } from "@/components/hq/ui";
+import { fmtMinutes, renewalState } from "@/lib/hq/projects";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,8 @@ export default async function HqHome({ searchParams }: { searchParams: Promise<{
   if (!h.can("dashboard.view")) {
     return (
       <div>
-        <PageHeader title={`Welcome, ${h.name}`} sub="Use the menu above for the parts of Matrix HQ you have access to." />
+        <PageHeader title={`Welcome, ${h.name}`} sub="Use the menu for the parts of Matrix HQ you have access to." />
+        {h.can("time.log") && <p className="mb-4 text-sm"><Link href="/platform/time" className="btn-primary">My time and tasks</Link></p>}
         {denied && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Your role doesn&apos;t include that page. Ask the owner if you need it.</p>}
       </div>
     );
@@ -24,14 +26,20 @@ export default async function HqHome({ searchParams }: { searchParams: Promise<{
   const today = londonDate();
   const monthStart = londonDayStart(`${today.slice(0, 7)}-01`);
   const yearAgo = londonDayStart(`${Number(today.slice(0, 4)) - 1}-${today.slice(5, 7)}-01`);
-  const [open, payments, leads, quotes, recent, rates] = await Promise.all([
+  const [open, payments, leads, quotes, recent, rates, work] = await Promise.all([
     db.hqInvoice.findMany({ where: { status: { in: ["SENT", "PARTIAL"] } }, include: { client: { select: { name: true } } }, orderBy: { dueDate: "asc" } }),
     db.hqPayment.findMany({ where: { date: { gte: yearAgo } }, select: { date: true, gbpPence: true } }),
     db.hqLead.findMany({ where: { stage: { notIn: ["WON", "LOST"] } }, select: { stage: true, valueMinor: true, currency: true } }),
     db.hqQuote.count({ where: { status: "SENT" } }),
     db.hqInvoice.findMany({ where: { status: { not: "DRAFT" } }, include: { client: { select: { name: true } } }, orderBy: { issueDate: "desc" }, take: 8 }),
     latestRates(),
+    Promise.all([
+      db.hqProject.count({ where: { status: "ACTIVE" } }),
+      db.hqTimeEntry.aggregate({ where: { billable: true, invoiceId: null }, _sum: { minutes: true } }),
+      db.hqContract.findMany({ where: { status: "ACTIVE", endDate: { not: null } }, select: { endDate: true, noticeDays: true, status: true } }),
+    ]),
   ]);
+  const renewalsDue = work[2].filter((c) => ["due", "overdue"].includes(renewalState({ status: c.status, endDate: londonDate(c.endDate!), noticeDays: c.noticeDays }, today))).length;
   const now = Date.now();
   const owed = (i: (typeof open)[number]) => toGbpPence(i.totalMinor - i.paidMinor, i.currency, Number(i.perGbp));
   const outstanding = open.reduce((n, i) => n + owed(i), 0);
@@ -65,6 +73,11 @@ export default async function HqHome({ searchParams }: { searchParams: Promise<{
         <Stat label="Overdue" value={formatGBP(overdue.reduce((n, i) => n + owed(i), 0))} sub={`${overdue.length} invoice${overdue.length === 1 ? "" : "s"}`} />
         <Stat label="Received this month" value={formatGBP(thisMonth)} sub={`${formatGBP(last12)} in the last 12 months`} />
         <Stat label="Quotes waiting" value={String(quotes)} sub="Sent, no answer yet" />
+      </div>
+      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <Link href="/platform/projects" className="block"><Stat label="Active projects" value={String(work[0])} /></Link>
+        <Link href="/platform/projects" className="block"><Stat label="Unbilled hours" value={fmtMinutes(work[1]._sum.minutes ?? 0)} sub="Billable time not yet invoiced" /></Link>
+        <Link href="/platform/contracts" className="block"><Stat label="Renewals due" value={String(renewalsDue)} sub="Contracts to renew now" /></Link>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
