@@ -2,15 +2,10 @@
 import { useActionState, useEffect, useState } from "react";
 import type { FormState } from "@/lib/server/actions/auth";
 
-/** What HMRC's fraud prevention rules ask the browser for. The device ID stays in this browser. */
+/** What HMRC's fraud prevention rules ask the browser for. The device ID is kept by the server in a cookie. */
 function clientInfo() {
-  let deviceId = "";
-  try {
-    deviceId = localStorage.getItem("hq.deviceId") ?? "";
-    if (!deviceId) { deviceId = crypto.randomUUID(); localStorage.setItem("hq.deviceId", deviceId); }
-  } catch { deviceId = crypto.randomUUID(); }
   return JSON.stringify({
-    deviceId, userAgent: navigator.userAgent, timezoneOffset: new Date().getTimezoneOffset(),
+    userAgent: navigator.userAgent, timezoneOffset: new Date().getTimezoneOffset(),
     screens: [{ width: screen.width, height: screen.height, scale: window.devicePixelRatio || 1, depth: screen.colorDepth }],
     window: { width: window.innerWidth, height: window.innerHeight },
   });

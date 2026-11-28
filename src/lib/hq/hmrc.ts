@@ -2,7 +2,7 @@
 
 /** What the browser tells us about itself when a return is submitted (collected by the submit form). */
 export interface ClientInfo {
-  deviceId: string; userAgent: string; timezoneOffset: number; // minutes, as Date.getTimezoneOffset() gives
+  userAgent: string; timezoneOffset: number; // minutes, as Date.getTimezoneOffset() gives
   screens: { width: number; height: number; scale: number; depth: number }[]; window: { width: number; height: number };
 }
 
@@ -10,9 +10,9 @@ export function parseClientInfo(raw: string): ClientInfo | null {
   try {
     const j = JSON.parse(raw);
     const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-    if (typeof j?.deviceId !== "string" || !/^[0-9a-f-]{36}$/i.test(j.deviceId)) return null;
+    if (typeof j?.userAgent !== "string" || !j.userAgent) return null;
     return {
-      deviceId: j.deviceId, userAgent: String(j.userAgent ?? "").slice(0, 500), timezoneOffset: num(j.timezoneOffset),
+      userAgent: String(j.userAgent ?? "").slice(0, 500), timezoneOffset: num(j.timezoneOffset),
       screens: (Array.isArray(j.screens) ? j.screens : []).slice(0, 8).map((s: Record<string, unknown>) => ({ width: num(s.width), height: num(s.height), scale: num(s.scale) || 1, depth: num(s.depth) })),
       window: { width: num(j.window?.width), height: num(j.window?.height) },
     };
@@ -31,11 +31,11 @@ export function utcOffset(minutes: number) {
  * HMRC's fraud prevention headers for a web app whose server talks to HMRC (WEB_APP_VIA_SERVER).
  * Headers we can't know (the client's port, the server's own public IP on Vercel) are left out.
  */
-export function fraudHeaders(p: { client: ClientInfo; clientIp: string | null; userId: string; version: string; at?: Date }) {
+export function fraudHeaders(p: { client: ClientInfo; deviceId: string; clientIp: string | null; userId: string; version: string; at?: Date }) {
   const h: Record<string, string> = {
     "Gov-Client-Connection-Method": "WEB_APP_VIA_SERVER",
     "Gov-Client-Browser-JS-User-Agent": p.client.userAgent,
-    "Gov-Client-Device-ID": p.client.deviceId,
+    "Gov-Client-Device-ID": p.deviceId,
     "Gov-Client-Timezone": utcOffset(p.client.timezoneOffset),
     "Gov-Client-Screens": p.client.screens.map((s) => `width=${s.width}&height=${s.height}&scaling-factor=${s.scale}&colour-depth=${s.depth}`).join(","),
     "Gov-Client-Window-Size": `width=${p.client.window.width}&height=${p.client.window.height}`,
