@@ -1,5 +1,7 @@
 "use server";
-import { headers } from "next/headers";
+import { randomUUID } from "node:crypto";
+import { cookies, headers } from "next/headers";
+import { cookieOpts } from "@/lib/server/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/server/db";
@@ -136,12 +138,19 @@ export async function fileVatReturn(_: FormState, f: FormData): Promise<FormStat
   return { ok: toHmrc ? "Sent to HMRC and filed" : "Marked as filed" };
 }
 
+const DEVICE_COOKIE = "hq_hmrc_device";
+
 async function clientHeaders(raw: string, userId: string) {
   const client = parseClientInfo(raw);
   if (!client) return null;
   const hd = await headers();
   const ip = hd.get("x-forwarded-for")?.split(",")[0]?.trim() || hd.get("x-real-ip") || null;
-  return fraudHeaders({ client, clientIp: ip, userId, version: process.env.npm_package_version ?? "1.0.0" });
+  // HMRC wants an ID that stays the same for this device, kept in an httpOnly cookie.
+  const jar = await cookies();
+  let deviceId = jar.get(DEVICE_COOKIE)?.value ?? "";
+  if (!/^[0-9a-f-]{36}$/.test(deviceId)) deviceId = randomUUID();
+  jar.set(DEVICE_COOKIE, deviceId, cookieOpts(400 * 86_400));
+  return fraudHeaders({ client, deviceId, clientIp: ip, userId, version: process.env.npm_package_version ?? "1.0.0" });
 }
 
 /** HMRC's list of the returns it expects. Called from the browser, which sends the details HMRC asks for. */

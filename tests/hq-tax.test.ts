@@ -96,8 +96,8 @@ describe("year end", () => {
 });
 
 describe("HMRC fraud prevention headers", () => {
-  const raw = JSON.stringify({ deviceId: "beec798b-b366-47fa-b1f8-92cede14a1ce", userAgent: "Mozilla/5.0", timezoneOffset: -60, screens: [{ width: 1920, height: 1080, scale: 2, depth: 24 }], window: { width: 1256, height: 803 } });
-  it("reads what the browser sent, refusing anything without a device ID", () => {
+  const raw = JSON.stringify({ userAgent: "Mozilla/5.0", timezoneOffset: -60, screens: [{ width: 1920, height: 1080, scale: 2, depth: 24 }], window: { width: 1256, height: 803 } });
+  it("reads what the browser sent, refusing anything without a user agent", () => {
     expect(parseClientInfo(raw)?.window.width).toBe(1256);
     expect(parseClientInfo("{}")).toBeNull();
     expect(parseClientInfo("not json")).toBeNull();
@@ -108,8 +108,9 @@ describe("HMRC fraud prevention headers", () => {
     expect(utcOffset(330)).toBe("UTC-05:30");
   });
   it("builds the headers for a web app through a server", () => {
-    const h = fraudHeaders({ client: parseClientInfo(raw)!, clientIp: "198.51.100.7", userId: "u1", version: "1.0.0", at: new Date("2026-11-28T10:00:00Z") });
+    const h = fraudHeaders({ client: parseClientInfo(raw)!, deviceId: "beec798b-b366-47fa-b1f8-92cede14a1ce", clientIp: "198.51.100.7", userId: "u1", version: "1.0.0", at: new Date("2026-11-28T10:00:00Z") });
     expect(h["Gov-Client-Connection-Method"]).toBe("WEB_APP_VIA_SERVER");
+    expect(h["Gov-Client-Device-ID"]).toBe("beec798b-b366-47fa-b1f8-92cede14a1ce");
     expect(h["Gov-Client-Screens"]).toBe("width=1920&height=1080&scaling-factor=2&colour-depth=24");
     expect(h["Gov-Client-Public-IP-Timestamp"]).toBe("2026-11-28T10:00:00.000Z");
     expect(h["Gov-Vendor-Version"]).toBe("Matrix%20HQ=1.0.0");
